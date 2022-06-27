@@ -1,0 +1,107 @@
+[2022-06-24T16:35:25.335] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:366:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:35:35.684] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:366:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:38:43.025] [ERROR] error - 系统错误
+[2022-06-24T16:38:45.942] [ERROR] error - 系统错误
+[2022-06-24T16:41:17.661] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:366:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:42:38.120] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:366:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:48:08.777] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:48:34.922] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:50:27.266] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:50:37.473] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:50:58.753] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:51:13.252] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:52:17.686] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:52:19.858] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T16:52:23.789] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:367:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T17:23:52.885] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:386:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)
+[2022-06-24T17:23:59.766] [ERROR] error - 查询异常TypeError: Cannot read properties of null (reading 'username')
+    at /Users/ymfsder/WebstormProjects/bmj-online-server/routes/competes.js:386:46
+    at processTicksAndRejections (node:internal/process/task_queues:96:5)
+    at async /Users/ymfsder/WebstormProjects/bmj-online-server/app.js:58:5
+    at async serve (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-static/index.js:53:9)
+    at async logger (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-logger/index.js:67:7)
+    at async bodyParser (/Users/ymfsder/WebstormProjects/bmj-online-server/node_modules/koa-bodyparser/index.js:95:5)

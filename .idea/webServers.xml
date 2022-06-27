@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="a659f753-45b8-4e4d-808f-4f67f2596a72" name="118.25.45.41">
+        <fileTransfer rootFolder="/www/wwwroot/bmj-online-serve" accessType="SFTP" host="118.25.45.41" port="22" sshConfigId="7ca81da1-4a04-40b0-850d-cb8ff01fe489" sshConfig="root@118.25.45.41:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="eb174f1a-6135-4af6-8e86-1b74589b771c" name="139.224.13.0">
+        <fileTransfer rootFolder="/www/wwwroot/bmj-server" accessType="SFTP" host="139.224.13.0" port="22" sshConfigId="e2ea50a4-e310-4e8c-8500-72a71b0475ab" sshConfig="root@139.224.13.0:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="e77b3c6e-7e6c-4bd1-a03e-3ffcdcc6c427" name="bmj">
+        <fileTransfer rootFolder="/www/wwwroot/api" accessType="SFTP" host="1.116.248.226" port="22" sshConfigId="264307d1-101b-428a-9d08-408c31edec41" sshConfig="root@1.116.248.226:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

@@ -1,0 +1,521 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dataSource name="bmj">
+  <database-model serializer="dbm" dbms="MONGO" family-id="MONGO" format-version="4.41">
+    <root id="1">
+      <ServerVersion>4.4.6</ServerVersion>
+    </root>
+    <schema id="2" parent="1" name="admin"/>
+    <schema id="3" parent="1" name="bmj-online"/>
+    <schema id="4" parent="1" name="config"/>
+    <schema id="5" parent="1" name="local"/>
+    <table id="6" parent="3" name="answerLogs"/>
+    <table id="7" parent="3" name="compete"/>
+    <table id="8" parent="3" name="counters"/>
+    <table id="9" parent="3" name="departments"/>
+    <table id="10" parent="3" name="finalUsers"/>
+    <table id="11" parent="3" name="match"/>
+    <table id="12" parent="3" name="menus"/>
+    <table id="13" parent="3" name="pens"/>
+    <table id="14" parent="3" name="pens_copy1"/>
+    <table id="15" parent="3" name="roles"/>
+    <table id="16" parent="3" name="roomLogs"/>
+    <table id="17" parent="3" name="scores"/>
+    <table id="18" parent="3" name="users"/>
+    <column id="19" parent="6" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="20" parent="6" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="21" parent="6" name="cid">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="22" parent="6" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="23" parent="6" name="isRight">
+      <DataType>Boolean|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="24" parent="6" name="penId">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="25" parent="6" name="postAnswer">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="26" parent="6" name="roomId">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="27" parent="6" name="rounds">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="28" parent="6" name="type">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="29" parent="6" name="uid">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="30" parent="6" name="useTime">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="31" parent="7" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="32" parent="7" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="33" parent="7" name="cId">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="34" parent="7" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="35" parent="7" name="create_uid">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="36" parent="7" name="currentType">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="37" parent="7" name="endTime">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="38" parent="7" name="scores">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="39" parent="7" name="startTime">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="40" parent="7" name="title">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="41" parent="7" name="updateTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="42" parent="7" name="create_username">
+      <DataType>String|12s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="43" parent="7" name="state">
+      <DataType>Int32|4s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="44" parent="8" name="_id">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="45" parent="8" name="sequenceValue">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="46" parent="11" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="47" parent="11" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="48" parent="11" name="cid">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="49" parent="11" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="50" parent="11" name="currentRound">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="51" parent="11" name="mId">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="52" parent="11" name="pushPen">
+      <DataType>list|4999545s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="53" parent="11" name="state">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="54" parent="11" name="type">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="55" parent="11" name="userCount">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="56" parent="11" name="userOneId">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="57" parent="11" name="pushPen.__v">
+      <DataType>Int32|4s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="58" parent="11" name="userTwoId">
+      <DataType>ObjectId|12s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="59" parent="11" name="pushPen._id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>3</Position>
+    </column>
+    <column id="60" parent="11" name="pushPen.answer">
+      <DataType>String|12s</DataType>
+      <Position>4</Position>
+    </column>
+    <column id="61" parent="11" name="pushPen.createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>5</Position>
+    </column>
+    <column id="62" parent="11" name="pushPen.degree">
+      <DataType>String|12s</DataType>
+      <Position>6</Position>
+    </column>
+    <column id="63" parent="11" name="pushPen.isRandom">
+      <DataType>Boolean|12s</DataType>
+      <Position>7</Position>
+    </column>
+    <column id="64" parent="11" name="pushPen.options">
+      <DataType>Array|2003s</DataType>
+      <Position>8</Position>
+    </column>
+    <column id="65" parent="11" name="pushPen.penId">
+      <DataType>Int32|4s</DataType>
+      <Position>9</Position>
+    </column>
+    <column id="66" parent="11" name="pushPen.penType">
+      <DataType>String|12s</DataType>
+      <Position>10</Position>
+    </column>
+    <column id="67" parent="11" name="pushPen.stem">
+      <DataType>String|12s</DataType>
+      <Position>11</Position>
+    </column>
+    <column id="68" parent="11" name="pushTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>12</Position>
+    </column>
+    <column id="69" parent="12" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="70" parent="12" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="71" parent="12" name="component">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="72" parent="12" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="73" parent="12" name="icon">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="74" parent="12" name="menuCode">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="75" parent="12" name="parentId">
+      <DataType>Array|2003s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="76" parent="12" name="updateTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="77" parent="12" name="menuName">
+      <DataType>String|12s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="78" parent="12" name="path">
+      <DataType>String|12s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="79" parent="12" name="menuState">
+      <DataType>Int32|4s</DataType>
+      <Position>3</Position>
+    </column>
+    <column id="80" parent="12" name="menuType">
+      <DataType>Int32|4s</DataType>
+      <Position>4</Position>
+    </column>
+    <column id="81" parent="13" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="82" parent="13" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="83" parent="13" name="answer">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="84" parent="13" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="85" parent="13" name="degree">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="86" parent="13" name="isRandom">
+      <DataType>Boolean|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="87" parent="13" name="options">
+      <DataType>Array|2003s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="88" parent="13" name="penId">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="89" parent="13" name="penType">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="90" parent="13" name="stem">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="91" parent="14" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="92" parent="14" name="answer">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="93" parent="14" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="94" parent="14" name="degree">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="95" parent="14" name="isRandom">
+      <DataType>Boolean|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="96" parent="14" name="options">
+      <DataType>Array|2003s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="97" parent="14" name="penId">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="98" parent="14" name="penType">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="99" parent="14" name="stem">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="100" parent="14" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="101" parent="15" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="102" parent="15" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="103" parent="15" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="104" parent="15" name="permissionList">
+      <DataType>Object|4999544s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="105" parent="15" name="roleName">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="106" parent="15" name="permissionList.checkedKeys">
+      <DataType>list|4999545s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="107" parent="15" name="permissionList.halfCheckKeys">
+      <DataType>list|4999545s</DataType>
+      <Position>3</Position>
+    </column>
+    <column id="108" parent="16" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="109" parent="16" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="110" parent="16" name="cId">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="111" parent="16" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="112" parent="16" name="rightNumber">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="113" parent="16" name="roomId">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="114" parent="16" name="rounds">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="115" parent="16" name="type">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="116" parent="16" name="uid">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="117" parent="16" name="useTime">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="118" parent="17" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="119" parent="17" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="120" parent="17" name="accuracy">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="121" parent="17" name="answer_number">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="122" parent="17" name="competeId">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="123" parent="17" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="124" parent="17" name="lastUpdateTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="125" parent="17" name="score">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="126" parent="17" name="userId">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="127" parent="17" name="accuracy_number">
+      <DataType>Int32|4s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="128" parent="17" name="answer_time">
+      <DataType>Int32|4s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="129" parent="17" name="scoreDisuse">
+      <DataType>Int32|4s</DataType>
+      <Position>2</Position>
+    </column>
+    <column id="130" parent="17" name="scoreFinal">
+      <DataType>Int32|4s</DataType>
+      <Position>3</Position>
+    </column>
+    <column id="131" parent="17" name="scoreMust">
+      <DataType>Int32|4s</DataType>
+      <Position>4</Position>
+    </column>
+    <column id="132" parent="18" name="_id">
+      <DataType>ObjectId|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="133" parent="18" name="__v">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="134" parent="18" name="city">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="135" parent="18" name="createTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="136" parent="18" name="depart">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="137" parent="18" name="img">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="138" parent="18" name="lastLoginTime">
+      <DataType>ISODate|91s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="139" parent="18" name="phone">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="140" parent="18" name="role">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="141" parent="18" name="userId">
+      <DataType>Int32|4s</DataType>
+      <Position>1</Position>
+    </column>
+    <column id="142" parent="18" name="username">
+      <DataType>String|12s</DataType>
+      <Position>1</Position>
+    </column>
+  </database-model>
+</dataSource>
