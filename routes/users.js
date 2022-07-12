@@ -36,18 +36,28 @@ router.post('/login', async(ctx) => {
 
 // 用户列表
 router.get('/list', async(ctx) => {
-    const {userName, userEmail, state} = ctx.request.query
+    const {username, city, depart, phone} = ctx.request.query
     const {page, skipIndex} = util.pager(ctx.request.query)
     const params = {}
-    if(state && state !== '0') params.state = state
-    if(userName) {
-        params.userName = {
-            $regex: userName, $options: 'i'
+    params.role=1
+    if(username) {
+        params.username = {
+            $regex: username, $options: 'i'
         }
     }
-    if(userEmail) {
-        params.userEmail = {
-            $regex: userEmail, $options: 'i'
+    if(phone) {
+        params.phone = {
+            $regex: phone, $options: 'i'
+        }
+    }
+    if(city) {
+        params.city = {
+            $regex: city, $options: 'i'
+        }
+    }
+    if(depart) {
+        params.depart = {
+            $regex: depart, $options: 'i'
         }
     }
 

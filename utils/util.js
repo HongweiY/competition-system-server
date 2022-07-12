@@ -11,6 +11,7 @@ const RoomLog = require("../models/roomLogSchema");
 const Compete = require("../models/competeSchema");
 const Counter = require("../models/counterSchema");
 const AnswerLog = require("../models/answerLogSchema");
+const Score = require("../models/scoreSchema");
 const User = require("../models/userSchema");
 const crypto = require('crypto');
 const dayjs = require("dayjs");
@@ -33,7 +34,7 @@ const getJWTPayload = token => {
 
 //排位赛资格
 async function canGoFinal(userId, cid) {
-    const userInfo = await FinalUser.findOne({userId}).exec()
+    const userInfo = await FinalUser.findOne({userId, cid}).exec()
     if(!userInfo) {
         return false
     }
@@ -41,24 +42,35 @@ async function canGoFinal(userId, cid) {
     const accuracy = ((userInfo['accuracy_number'] / userInfo['answer_number']) * 100).toFixed(2) + '%'
     //查询第几轮
     let competeInfo = await Compete.findOne({cId: cid})
+    const finalUser = competeInfo['finalUser']
+    let spacingCount = 5
+    if(finalUser === 60) {
+        spacingCount = 4
+    }
+    let allNumber = 0
     switch(competeInfo['finalRounds']) {
         case 1:
+            allNumber = finalUser * 0.3 + spacingCount
             //第1轮 31-65  66-100 参加
-            if(rank < 31) {
+            if(rank < finalUser * 0.3 + 1) {
                 return false
-            } else if(rank > 65) {
+                // } else if(rank > 65) {
+            } else if(rank > finalUser * 0.6 + spacingCount) {
                 return {
-                    allNumber: 35,
+                    // allNumber: 35,
+                    allNumber,
                     rank,
                     accuracy,
-                    area: '66-100名'
+                    // area: '66-100名'
+                    area: `${finalUser * 0.6 + spacingCount + 1}-${finalUser}名`
                 }
             } else {
                 return {
-                    allNumber: 35,
+                    allNumber,
                     rank,
                     accuracy,
-                    area: '31-65名'
+                    // area: '31-65名'
+                    area: `${finalUser * 0.3 + 1}-${finalUser * 0.6 + spacingCount}名`
                 }
             }
             //同时获得题目信息
@@ -66,77 +78,79 @@ async function canGoFinal(userId, cid) {
             break;
         case 2:
             //第2轮 11-35  66-100 参加
-            if(rank < 11 || (rank > 35 && rank < 66)) {
+            // if(rank < 11 || (rank > 35 && rank < 66)) {
+            allNumber = finalUser * 0.2 + spacingCount
+            if(rank < finalUser * 0.1 + 1 || (rank > finalUser * 0.3 + spacingCount && rank < finalUser * 0.6 + spacingCount + 1)) {
                 return false
-            } else if(rank > 65) {
+            } else if(rank > finalUser * 0.6 + spacingCount) {
                 return {
-                    allNumber: 25,
+                    // allNumber: 25,
+                    allNumber,
                     rank,
                     accuracy,
-                    area: '66-100名'
+                    area: `${finalUser * 0.6 + spacingCount + 1}-${finalUser}名`
                 }
             } else {
                 return {
-                    allNumber: 25,
+                    allNumber,
                     rank,
                     accuracy,
-                    area: '11-35名'
+                    // area: '11-35名'
+                    area: `${finalUser * 0.1 + 1}-${finalUser * 0.3 + spacingCount}名`
                 }
             }
-            break;
         case 3:
             //第3轮 1-15 66-100 参加
-            if(rank > 15 && rank < 66) {
+            // if(rank > 15 && rank < 66) {
+            allNumber = finalUser * 0.1 + spacingCount
+            if(rank > finalUser * 0.1 + spacingCount && rank < finalUser * 0.6 + spacingCount + 1) {
                 return false
-            } else if(rank > 65) {
+            } else if(rank > finalUser * 0.6 + spacingCount) {
                 return {
-                    allNumber: 15,
+                    allNumber,
                     rank,
                     accuracy,
-                    area: '66-100名'
+                    area: `${finalUser * 0.6 + spacingCount + 1}-${finalUser}名`
                 }
             } else {
                 return {
-                    allNumber: 15,
+                    allNumber,
                     rank,
                     accuracy,
-                    area: '1-15名'
+                    // area: '1-15名'
+                    area: ` 0 -${finalUser * 0.1 + spacingCount}名`
                 }
             }
             break;
         case 4:
             //第4轮
             // 第一题 66 vs 60 第二题 60 vs 59 。。59 58。。。
+            // 第一题 41 vs 36 第二题 36 vs 35 。。35 34。。。
             //查询当前在第几题
             let rank_1, rank_2
-
             const finalPenLogCount = await FinalPenLogSchema.countDocuments({cid: cid, round: 4})
-            console.log('finalPenLogCount')
-            console.log(finalPenLogCount)
-            if(finalPenLogCount == 1) {
-                if(rank === 66 || rank === 60) {
-                    rank_1 = 66
-                    rank_2 = 60
-                }else {
+            if(finalPenLogCount <= 1) {
+                // if(rank === 66 || rank === 60) {
+                if(rank === finalUser * 0.6 + spacingCount + 1 || rank === finalUser * 0.6) {
+                    rank_1 = finalUser * 0.6 + spacingCount + 1
+                    rank_2 = finalUser * 0.6
+                } else {
                     return false
                 }
             } else {
-                if(rank === 62 - finalPenLogCount || rank === 61 - finalPenLogCount) {
-                    rank_1 = 62 - finalPenLogCount
-                    rank_2 = 61 - finalPenLogCount
-                }else {
+                // if(rank === 62 - finalPenLogCount || rank === 61 - finalPenLogCount) {
+                if(rank === finalUser * 0.6 + 2 - finalPenLogCount || rank === finalUser * 0.6 + 1 - finalPenLogCount) {
+                    rank_1 = finalUser * 0.6 + 2 - finalPenLogCount
+                    rank_2 = finalUser * 0.6 + 1 - finalPenLogCount
+                } else {
                     return false
                 }
 
             }
-            console.log('---------rank_1,rank_2---------')
-            console.log(rank_1,rank_2)
-            console.log('------------------')
+
             //查询两个人信息推送
-            const finalUserInfos = await FinalUser.find({rank: {$in: [rank_1, rank_2]}}).exec()
-            console.log('---------finalUserInfos---------')
-            console.log(finalUserInfos)
-            console.log('------------------')
+
+            const finalUserInfos = await FinalUser.find({rank: {$in: [rank_1, rank_2]}, cid}).exec()
             for(const finalUserInfo of finalUserInfos) {
                 const msg = {
                     'event': 'finalUser',
@@ -145,20 +159,22 @@ async function canGoFinal(userId, cid) {
                 global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
             }
             return {
-                allNumber: 1,
+                allNumber: finalPenLogCount + 1,
                 rank,
                 accuracy,
-                area: '车轮战'
+                area: '复活赛'
             }
 
             break;
         case 5:
             //第5轮 31 vs 30
-            if(rank !== 30 || rank !== 31) {
-                return false
-            } else {
+            // if(rank === 30 || rank === 31) {
+            if(rank === finalUser * 0.3 || rank === finalUser * 0.3 + 1) {
                 //查询两个人信息推送
-                const finalUserInfos = await FinalUser.find({rank: {$in: [30, 31]}}).exec()
+                const finalUserInfos = await FinalUser.find({
+                    rank: {$in: [finalUser * 0.3, finalUser * 0.3 + 1]},
+                    cid
+                }).exec()
                 for(const finalUserInfo of finalUserInfos) {
                     const msg = {
                         'event': 'finalUser',
@@ -172,14 +188,19 @@ async function canGoFinal(userId, cid) {
                     accuracy,
                     area: '银奖挑战'
                 }
+            } else {
+                return false
             }
             break;
         case 6:
-            if(rank !== 11 || rank !== 10) {
-                return false
-            } else {
+            //第6轮 11 vs  10
+            if(rank === finalUser * 0.1 + 1 || rank === finalUser * 0.1) {
+
                 //查询两个人信息推送
-                const finalUserInfos = await FinalUser.find({rank: {$in: [10, 11]}}).exec()
+                const finalUserInfos = await FinalUser.find({
+                    rank: {$in: [finalUser * 0.1 + 1, finalUser * 0.1]},
+                    cid
+                }).exec()
                 for(const finalUserInfo of finalUserInfos) {
                     const msg = {
                         'event': 'finalUser',
@@ -193,54 +214,84 @@ async function canGoFinal(userId, cid) {
                     accuracy,
                     area: '金奖挑战'
                 }
+            } else {
+                return false
             }
-            //第6轮 11 vs  10
             break;
     }
 }
 
 //推送竞赛信息
 async function pushFinalInfo(round, cid) {
-    const competeInfo = await Compete.findOne({cId: cid})
     let message = ''
     let finalUserInfos = []
+    let competeInfo = await Compete.findOne({cId: cid})
+    const finalUser = competeInfo['finalUser']
+    let spacingCount = 5
+    if(finalUser === 60) {
+        spacingCount = 4
+    }
     switch(round) {
         case 1:
-            finalUserInfos = await FinalUser.find({rank: {$gt: 30, $lt: 66}}).exec()
-            message = '终极排位赛，第一轮：31-65名 答题已结束'
+            // finalUserInfos = await FinalUser.find({rank: {$gt: 30, $lt: 66}, cid}).exec()
+            finalUserInfos = await FinalUser.find({
+                rank: {
+                    $gt: finalUser * 0.3,
+                    $lt: finalUser * 0.6 + spacingCount + 1
+                },
+                cid
+            }).exec()
+            message = `终极排位赛，第一轮：${finalUser * 0.3 + 1}-${finalUser * 0.6 + spacingCount}名 答题已结束`
             break;
         case 2:
             //第2轮 11-35  66-100 参加
-            finalUserInfos = await FinalUser.find({rank: {$gt: 10, $lt: 36}}).exec()
-            message = '终极排位赛，第二轮：31-65名 答题已结束'
+            finalUserInfos = await FinalUser.find({
+                rank: {
+                    $gt: finalUser * 0.1,
+                    $lt: finalUser * 0.3 + spacingCount + 1
+                }, cid
+            }).exec()
+            message = `终极排位赛，第二轮：${finalUser * 0.1 + 1}-${finalUser * 0.3 + spacingCount}名 答题已结束`
             break;
         case 3:
             //第3轮 1-15 66-100 参加
-            finalUserInfos = await FinalUser.find({$or: [{rank: {$lt: 15}}, {rank: {$gt: 65, $lt: 101}}]}).exec()
-            message = '终极排位赛，第三轮：31-65名 答题已结束'
+            finalUserInfos = await FinalUser.find({
+                cid,
+                $or: [
+                    {rank: {$lt: finalUser * 0.1 + spacingCount}},
+                    {rank: {$gt: finalUser * 0.6 + spacingCount, $lt: finalUser + 1}}]
+            }).exec()
+            message = `终极排位赛，第三轮：1-${finalUser * 0.1 + spacingCount}名 答题已结束`
             break;
         case 4:
             let rank_1, rank_2
             const finalPenLogCount = await FinalPenLogSchema.countDocuments({cid: cid, round: 4,})
             if(finalPenLogCount === 1) {
-                rank_1 = 66
-                rank_2 = 60
+                rank_1 = finalUser * 0.6 + spacingCount + 1
+                rank_2 = finalUser * 0.6
             } else {
-                rank_1 = 62 - finalPenLogCount
-                rank_2 = 61 - finalPenLogCount
+                rank_1 = finalUser * 0.6 + 2 - finalPenLogCount
+                rank_2 = finalUser * 0.6 + 1 - finalPenLogCount
             }
             //查询两个人信息推送
-            finalUserInfos = await FinalUser.find({rank: {$in: [rank_1, rank_2]}}).exec()
+            finalUserInfos = await FinalUser.find({cid, rank: {$in: [rank_1, rank_2]}}).exec()
             message = '终极排位赛，第四轮，第' + finalPenLogCount + '场 答题已结束'
             break;
         case 5:
             //第5轮 31 vs 30
-            finalUserInfos = await FinalUser.find({rank: {$in: [30, 31]}}).exec()
+            finalUserInfos = await FinalUser.find({cid, rank: {$in: [finalUser * 0.3, finalUser * 0.3 + 1]}}).exec()
             message = '终极排位赛，第五轮，答题已结束'
             break;
         case 6:
-            finalUserInfos = await FinalUser.find({rank: {$in: [10, 11]}}).exec()
-            message = '终极排位赛，第六轮，答题已结束'
+            // finalUserInfos = await FinalUser.find({cid, rank: {$in: [finalUser * 0.1, finalUser * 0.3 + 1]}}).exec()
+            // message = '终极排位赛，第六轮，答题已结束'
+            // break;
+            finalUserInfos = await FinalUser.find({cid}).exec()
+            message = '终极排位赛，比赛已结束'
+            break;
+        case 7:
+            finalUserInfos = await FinalUser.find({cid}).exec()
+            message = '终极排位赛，比赛已结束'
             break;
     }
 
@@ -256,7 +307,6 @@ async function pushFinalInfo(round, cid) {
 
 //推送题目
 async function pushPen(roomId, cid, type = 'end', uid = 'all') {
-    console.log({roomId, cid, type, uid})
     //排除当前已经回答过的题目
     const answerLogs = await AnswerLog.find({roomId, cid})
     let penIds = []
@@ -267,12 +317,15 @@ async function pushPen(roomId, cid, type = 'end', uid = 'all') {
         }
     }
     let penInfo
+    let params = {}
+    params.penType = {$in: ['判断', '多选', '单选',]}
+    // params.penType = {$in: ['场景题']}
     if(penIds.length > 0) {
         do {
-            penInfo = await Pen.aggregate().sample(1)
+            penInfo = await Pen.aggregate().match(params).sample(1)
         } while(penIds.includes(penInfo[0].penId));
     } else {
-        penInfo = await Pen.aggregate().sample(1)
+        penInfo = await Pen.aggregate().match(params).sample(1)
     }
     //查询当前所在题目
     const matchInfo = await Match.findOne({_id: roomId})
@@ -296,21 +349,24 @@ async function pushPen(roomId, cid, type = 'end', uid = 'all') {
         })
         //
     }
+
     //判断给所有人 还是单人推送题目
     if(uid === 'all') {
         //给所有人推送题目，默认
-        const $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId, matchInfo.userThreeId, matchInfo.userFourId]}})
+        let $allUsers
+        if(competeInfo['currentType'] === 'must') {
+            $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId, matchInfo.userThreeId, matchInfo.userFourId]}})
+        } else {
+            $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId]}})
+        }
 
         for(const userInfo of $allUsers) {
-            const returnRounds = await RoomLog.countDocuments({
+            let returnRounds = await RoomLog.countDocuments({
                 uid: userInfo.userId, cId: cid, type: competeInfo['currentType'], roomId: {$ne: roomId}
             })
-            console.log('returnRounds')
-            console.log({uid: userInfo.userId, cId: cid, type})
-            console.log(returnRounds)
-            console.log('returnRounds')
             const msg = {
                 'event': 'pushPen', 'message': {
+                    uid: userInfo.userId,
                     rounds: returnRounds + 1,
                     penRoundsNumber,  // 当前所在题目
                     allNum,
@@ -323,7 +379,6 @@ async function pushPen(roomId, cid, type = 'end', uid = 'all') {
 
                 }
             }
-            console.log(roomId.toString(), userInfo.userId)
             global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
         }
     } else {
@@ -362,6 +417,7 @@ async function startMatch(params) {
     if(isExitMatch) {
         if(isExitMatch['userCount'] === MaxUserCount[type]) {
             const userInfo = await User.findById(userId).exec()
+            console.log('开始推送题目')
             await pushPen(isExitMatch._id, cid, 'end', userInfo.userId)
             return isExitMatch._id
         } else {
@@ -372,7 +428,7 @@ async function startMatch(params) {
         //查询正在匹配的房间
         //状态state 1 匹配中 2 正在比赛 3当前房间答题已结束
         //type: 匹配类型 must  disuse
-        let matchInfo = await Match.findOne({$and: [{cid}, {type}, {state: {$in: [1]}}]})
+        let matchInfo = await Match.findOneAndUpdate({$and: [{cid}, {type}, {state: {$in: [1]}}]}, {state: 3})
         if(!matchInfo) {
             //没有，创建一个房间
             const counterDoc = await Counter.findOneAndUpdate({_id: 'matchId'}, {$inc: {sequenceValue: 1}}, {new: true})
@@ -395,10 +451,10 @@ async function startMatch(params) {
                 case 'must':
                     switch(matchInfo.userCount) {
                         case 1:
-                            await Match.updateOne({_id: _id}, {userTwoId: userId, userCount: 2})
+                            await Match.updateOne({_id: _id}, {userTwoId: userId, userCount: 2, state: 1})
                             break;
                         case 2:
-                            await Match.updateOne({_id: _id}, {userThreeId: userId, userCount: 3})
+                            await Match.updateOne({_id: _id}, {userThreeId: userId, userCount: 3, state: 1})
                             break;
                         case 3:
                             await Match.updateOne({_id: _id}, {
@@ -406,6 +462,7 @@ async function startMatch(params) {
                                 userCount: 4,
                                 state: 2
                             })
+                            console.log('这里也执行了')
                             await pushPen(_id, cid, 'start', 'all')
                             break;
                     }
@@ -426,10 +483,40 @@ async function startMatch(params) {
 
 //分发匹配信息
 async function matchUserInfo(roomID) {
-    const matchUserInfo = await Match.findById(roomID).populate(['userOneId', 'userTwoId', 'userThreeId', 'userFourId',]).exec()
+    const matchUserInfo = await Match.findById(roomID).populate(['userOneId', 'userTwoId', 'userThreeId', 'userFourId']).exec()
+
+    if(matchUserInfo.userOneId) {
+        const score = await Score.findOne({competeId: matchUserInfo.cid, userId: matchUserInfo.userOneId._id})
+        if(score) {
+            matchUserInfo.userOneId.score = score.score
+        }
+    }
+    if(matchUserInfo.userTwoId) {
+        const score = await Score.findOne({competeId: matchUserInfo.cid, userId: matchUserInfo.userTwoId._id})
+        if(score) {
+            matchUserInfo.userTwoId.score = score.score
+        }
+    }
+    if(matchUserInfo.userThreeId) {
+
+        const score = await Score.findOne({competeId: matchUserInfo.cid, userId: matchUserInfo.userThreeId._id})
+        if(score) {
+            matchUserInfo.userThreeId.score = score.score
+        }
+    }
+    if(matchUserInfo.userFourId) {
+        const score = await Score.findOne({competeId: matchUserInfo.cid, userId: matchUserInfo.userFourId._id})
+        if(score) {
+            matchUserInfo.userFourId.score = score.score
+        }
+    }
+
     const msg = {
         'event': 'matchRoom', 'message': matchUserInfo
     }
+    //查询用户的成绩
+
+    Score.findOne()
     global.ws.send(roomID.toString(), JSON.stringify(msg))
 }
 
@@ -451,7 +538,24 @@ async function answerInfo(roomID, rounds) {
         for(const roomLog of roomLogs) {
             if(userInfo['userId'] == roomLog['uid']) {
                 template.useTime = roomLog['useTime']
-                template.score = roomLog['rightNumber']
+                //如果当前是淘汰赛则不传递积分
+                const competitionInfo = await Compete.findOne({cId: matchUserInfo.cid})
+                console.log(competitionInfo)
+                if(competitionInfo['currentType'] === 'must') {
+                    template.score = roomLog['rightNumber']
+                } else {
+
+                    const scoreInfo = await Score.findOne({userId: userInfo._id, competeId: matchUserInfo.cid})
+                    console.log({uid: userInfo['userId'], competeId: matchUserInfo.cid})
+                    console.log(scoreInfo)
+                    if(scoreInfo) {
+                        template.score = scoreInfo['score']
+                    } else {
+                        template.score = 0
+                    }
+
+                }
+
             }
         }
         const answerLog = await AnswerLog.findOne({roomId: roomID, uid: userInfo['userId'], rounds}).exec()
@@ -466,12 +570,14 @@ async function answerInfo(roomID, rounds) {
         returnData.push({
             ...template, _id: userInfo._id
         })
+
     }
 
     const msg = {
         'event': 'pushAnswerInfo', 'message': returnData
     }
-    global.ws.send(roomID.toString(), JSON.stringify(msg))
+    global.ws.send(roomID.toString(), JSON.stringify(msg), 'all')
+
 
 }
 
@@ -489,6 +595,123 @@ async function noteRoomLog(params) {
         await RoomLog.create({
             uid, roomId, rounds, cId, rightNumber: isRight ? 1 : 0, useTime, type
         })
+    }
+}
+
+/**
+ * 推送终极排位赛的最后信息
+ * @param cid 竞赛id
+ * @param rounds 当前轮次
+ * @param penRoundsNumber 当前题目
+ * @returns {Promise<void>}
+ */
+async function pushCurrentFinalInfo(cid, rounds, penRoundsNumber) {
+    let finalUserInfos = []
+    let rank_1, rank_2
+    let competeInfo = await Compete.findOne({cId: cid}).exec()
+    const finalUser = competeInfo['finalUser']
+    let spacingCount = 5
+    if(finalUser === 60) {
+        spacingCount = 4
+    }
+    switch(rounds) {
+        case 1:
+            finalUserInfos = await FinalUser.find({rank: {$lt: finalUser * 0.3 + 1}, cid}).exec()
+            break;
+        case 2:
+            finalUserInfos = await FinalUser.find({
+                cid,
+                $or: [{rank: {$lt: finalUser * 0.1}}, {
+                    rank: {
+                        $gt: finalUser * 0.3 + spacingCount,
+                        $lt: finalUser * 0.6 + spacingCount + 1
+                    }
+                }]
+            }).exec()
+            break;
+        case 3:
+            finalUserInfos = await FinalUser.find({
+                rank: {
+                    $lt: finalUser * 0.6 + spacingCount + 1,
+                    $gt: finalUser * 0.1 + spacingCount
+                }, cid
+            }).exec()
+            break;
+        case 4:
+            const finalPenLogCount = await FinalPenLogSchema.countDocuments({cid: cid, round: 4,})
+            if(finalPenLogCount === 1) {
+                rank_1 = finalUser * 0.6 + spacingCount + 1
+                rank_2 = finalUser * 0.6
+            } else {
+                rank_1 = finalUser * 0.6 + 2 - finalPenLogCount
+                rank_2 = finalUser * 0.6 + 1 - finalPenLogCount
+            }
+            //查询两个人信息推送
+            finalUserInfos = await FinalUser.find({cid, rank: {$nin: [rank_1, rank_2]}}).exec()
+            break;
+        case 5:
+            //第5轮 31 vs 30
+            finalUserInfos = await FinalUser.find({cid, rank: {$nin: [finalUser * 0.3, finalUser * 0.3 + 1]}}).exec()
+            break;
+        case 6:
+            finalUserInfos = await FinalUser.find({cid, rank: {$nin: [finalUser * 0.1, finalUser * 0.1 + 1]}}).exec()
+            break;
+    }
+    //生成题目，写入数据库
+    for(const finaUser of finalUserInfos) {
+        const rank = finaUser.rank
+        let userRounds = ''
+        let showMessage = '请不要离开，等待题目推送'
+        if(rank < finalUser * 0.6 + spacingCount + 1 && rank > finalUser * 0.3) {
+            userRounds = '第 1 轮'
+            if(rounds > 1) {
+                showMessage = '你的答题已经结束'
+            }
+
+        }
+        if(rank < finalUser * 0.3 + spacingCount + 1 && rank > finalUser * 0.1) {
+            userRounds = '第 2 轮'
+            if(rounds > 2) {
+                showMessage = '你的答题已经结束'
+            }
+        }
+        if(rank < finalUser * 0.1 + spacingCount + 1) {
+            userRounds = userRounds === '' ? '第 3 轮' : userRounds + '、第 3 轮'
+            if(rounds > 3) {
+                showMessage = '你的答题已经结束'
+            }
+        }
+
+        if(rank === finalUser * 0.3 || rank === finalUser * 0.3 + 1) {
+            userRounds = userRounds === '' ? '第 4 轮第 2 场' : userRounds + '、第 4 轮-第 2 场'
+        }
+        if(rank === finalUser * 0.1 || rank === finalUser * 0.1 + 1) {
+            userRounds = userRounds === '' ? '第 4 轮第 3 场' : userRounds + '、第 4 轮-第 3 场'
+        }
+        // if(rounds === 4 && (rank === rank_1 || rank === rank_2)) {
+        //     userRounds = userRounds === '' ? '第 4 轮第 1 场' : userRounds + '、第 4 轮-第 1 场'
+        // }
+        if(rank === finalUser * 0.6) {
+            userRounds = userRounds === '' ? '第 4 轮第 1 场' : userRounds + '、第 4 轮-第 1 场'
+        }
+        if(rounds > 3 && rank !== rank_1 && rank !== rank_2) {
+            showMessage = '你的答题已经结束'
+        }
+
+        if(rounds > 6) {
+            showMessage = '比赛已经结束'
+        }
+        const msg = {
+            'event': 'pushCurrentFinalInfo',
+            'message': {
+                finalRounds: rounds,
+                penRoundsNumber,  // 当前所在题目
+                rank: finaUser.rank,
+                userRounds,
+                showMessage
+            }
+        }
+        global.ws.send('', JSON.stringify(msg), finaUser.userId)
     }
 }
 
@@ -536,12 +759,14 @@ module.exports = {
                 pageNum, pageSize
             }, skipIndex
         }
-    }, success(data = '', msg = '', code = CODE.SUCCESS) {
+    },
+    success(data = '', msg = '', code = CODE.SUCCESS) {
         log4j.debug(data)
         return {
             code, msg, data
         }
-    }, fail(msg = '', code = CODE.BUSINESS_ERROR) {
+    },
+    fail(msg = '', code = CODE.BUSINESS_ERROR) {
         log4j.error(msg)
         return {
             code, msg
@@ -565,5 +790,17 @@ module.exports = {
         })
 
         return list
-    }, getJWTPayload, CODE, pushPen, startMatch, matchUserInfo, decrypt, encrypt, noteRoomLog, answerInfo, canGoFinal,pushFinalInfo
+    },
+    getJWTPayload,
+    CODE,
+    pushPen,
+    startMatch,
+    matchUserInfo,
+    decrypt,
+    encrypt,
+    noteRoomLog,
+    answerInfo,
+    canGoFinal,
+    pushFinalInfo,
+    pushCurrentFinalInfo
 }

@@ -18,15 +18,23 @@ const FinalUser = require("../models/finalUserSchema");
 const mongoose = require("mongoose");
 const AnswerLog = require("../models/answerLogSchema");
 const FinalPenLogSchema = require("../models/finalPenLogSchema");
+const {pushCurrentFinalInfo} = require("../utils/util");
 
 
 // 竞赛列表
 router.get('/list', async(ctx) => {
     // const { userName, userEmail, state } = ctx.request.query
-    const {page, skipIndex} = util.pager(ctx.request.query)
+    const {page, skipIndex,} = util.pager(ctx.request.query)
+    const {keyword} = ctx.request.query
     const params = {
         state: 1
     }
+    if(keyword){
+        params.title = {
+            $regex: keyword, $options: 'i'
+        }
+    }
+    console.log(params)
     try {
         const list = await Compete.find(params, {}, {skip: skipIndex, limit: page.pageSize}).exec()
         const total = await Compete.countDocuments(params)
@@ -42,8 +50,20 @@ router.get('/list', async(ctx) => {
 
 // 新增竞赛
 router.post('/create', async(ctx) => {
-    const {title, scores = 1000, create_uid, create_username, startTime, endTime, action, cId, _id} = ctx.request.body
-    console.log(ctx.request)
+    const {
+        title,
+        scores = 1000,
+        create_uid,
+        create_username,
+        startTime,
+        endTime,
+        action,
+        cId,
+        _id,
+        screenings,
+        currentType = 'must',
+        finalUser=100
+    } = ctx.request.body
     //判断时间
     if(dayjs(endTime).isBefore(dayjs(startTime))) {
         ctx.body = util.fail('参数异常,结束时间不得早于开始时间', util.CODE.PARAM_ERROR)
@@ -69,7 +89,7 @@ router.post('/create', async(ctx) => {
             ctx.body = util.fail('参数异常', util.CODE.PARAM_ERROR)
             return
         }
-        // 判断系统是否存在用户
+        // 判断系统是否存
         const exitCompete = await Compete.findOne({$or: [{title}]}, '_id title')
         if(exitCompete) {
             ctx.body = util.fail(`添加失败。原因：竞赛名：${exitCompete.title}的竞赛已存在`)
@@ -77,9 +97,18 @@ router.post('/create', async(ctx) => {
         }
         const counterDoc = await Counter.findOneAndUpdate({_id: 'competeId'}, {$inc: {sequenceValue: 1}}, {new: true})
         const result = await Compete.create({
-            cId: counterDoc.sequenceValue, title, scores, create_uid, create_username, startTime, endTime
+            cId: counterDoc.sequenceValue,
+            title,
+            scores,
+            create_uid,
+            create_username,
+            startTime,
+            endTime,
+            currentType,
+            screenings,
+            finalUser
         })
-        console.log(result)
+
         if(result) {
             ctx.body = util.success({
                 "cid": result.cId, "title": result.title,
@@ -107,12 +136,8 @@ router.post('/delete', async(ctx) => {
  */
 router.post('/userAdd', async(ctx) => {
     const {cid, token} = ctx.request.body
-    console.log(util.decrypt(token).username)
-
     const {username, city, depart, phone, img} = util.decrypt(token)
-    console.log('添加用户')
     console.log({username, city, depart, phone, img})
-    console.log('添加用户')
     // 添加人员到系统
     if(!username || !city || !depart || !phone || !img) {
         ctx.body = util.fail('参数异常', util.CODE.PARAM_ERROR)
@@ -191,6 +216,13 @@ router.post('/match', async(ctx) => {
         ctx.body = util.fail(`竞赛信息异常`)
         return
     }
+    if(cid !== 1 && cid !== 2) {
+        if(dayjs().unix() - dayjs(competeInfo.startTime).unix() > (20 * 60 + 20 * 60)) {
+            ctx.body = util.fail(`竞赛已经结束`)
+            return
+        }
+    }
+
     const room_id = await util.startMatch({cid, type, userId})
 
     if(room_id) {
@@ -212,17 +244,19 @@ router.post('/startFinal', async(ctx) => {
         return
     }
     //判断用户信息
-    const userInfo = await FinalUser.findOne({userId: uid}).exec()
+    const userInfo = await FinalUser.findOne({userId: uid, cid}).exec()
     if(!userInfo) {
         ctx.body = util.fail('你不能参加终极排位赛', util.CODE.PARAM_ERROR)
         return
     }
     //判断竞赛是否存在，
     let competeInfo = await Compete.findOne({cId: cid})
-    console.log(competeInfo)
-    console.log(!competeInfo ,dayjs(competeInfo.startTime).isAfter(dayjs()) , dayjs(competeInfo.endTime).isBefore(dayjs()))
     if(!competeInfo || dayjs(competeInfo.startTime).isAfter(dayjs()) || dayjs(competeInfo.endTime).isBefore(dayjs())) {
         ctx.body = util.fail(`竞赛信息异常`)
+        return
+    }
+    if(competeInfo.finalRounds===7) {
+        await util.pushFinalInfo(6, cid)
         return
     }
     //判断当前竞赛在哪一轮当前用户是否有资格参加
@@ -235,11 +269,12 @@ router.post('/startFinal', async(ctx) => {
     //第30挑战31
     //第11
     const canGo = await util.canGoFinal(uid, cid)
+    const finalPenLog = await FinalPenLogSchema.find({cid: cid ,round:competeInfo['finalRounds']}).sort({penNumber: -1}).limit(1).exec()
     if(canGo) {
         //只写一次信息
 
         //推送题目
-        const finalPenLog = await FinalPenLogSchema.find({cid: cid}).sort({penNumber: -1}).limit(1).exec()
+
         //更新题目推送时间和倒计时。
         let countDown = 30
         countDown = countDown - (dayjs().unix() - dayjs(finalPenLog[0]['pushTime']).unix())
@@ -264,6 +299,7 @@ router.post('/startFinal', async(ctx) => {
         global.ws.send('', JSON.stringify(msg), uid)
         ctx.body = util.success('推送题目')
     } else {
+        await util.pushCurrentFinalInfo(cid, competeInfo['finalRounds'],finalPenLog[0]['penNumber'])
         ctx.body = util.fail(`你不能参加当前轮次比赛`)
         return
     }
@@ -271,20 +307,56 @@ router.post('/startFinal', async(ctx) => {
 
 //观摩
 router.get('/show', async(ctx) => {
-    //创建用户
-    // let userId = 10001
-    // for(let i = 0; i < 130; i++) {
-    //     await User.create({
-    //         userId,
-    //         username: 'testUser_' + i,
-    //         city: '南京',
-    //         depart: '研发',
-    //         phone: '19909090909',
-    //         img: 'http://dummyimage.com/200x200/50B347&text=#FFF',
-    //         userPwd: String,
+
+    // let mId = 1001
+    // // let userParams = {userId: {$in: [10000039, 10000040, 10000041, 10000042]}}
+    // let userParams = {userId:{$in: [10000027,10000033,10000034,10000035]}}
+    // for(let i = 0; i < 2000; i++) {
+    //     const userInfo = await User.aggregate().match(userParams).sample(1)
+    //     await Match.create({
+    //         mId,
+    //         cid: 2,
+    //         type: "disuse",
+    //         userCount: 1,
+    //         userOneId: userInfo[0]._id,
+    //         state: 1,
+    //         currentRound: 1
     //     })
-    //     userId++
+    //     mId++
     // }
+    //
+    //
+    // let nmId = 3001
+    // for(let i = 0; i < 2000; i++) {
+    //     const userInfo = await User.aggregate().match(userParams).sample(3)
+    //     await Match.create({
+    //         mId: nmId,
+    //         cid: 2,
+    //         type: "must",
+    //         userCount: 3,
+    //         userOneId: userInfo[0]._id,
+    //         userTwoId: userInfo[1]._id,
+    //         userThreeId: userInfo[2]._id,
+    //         state: 1,
+    //         currentRound: 1
+    //     })
+    //     nmId++
+    // }
+
+
+    // db.getCollection("match").insert({
+    //     _id: ObjectId("62bd554a60d3d3cb0128b45f"),
+    //     mId: NumberInt("101002"),
+    //     cid: NumberInt("2"),
+    //     type: "disuse",
+    //     userCount: NumberInt("1"),
+    //     userOneId: ObjectId("62b5774c6813c9477ffea481"),
+    //     createTime: ISODate("2022-06-30T07:47:00.187Z"),
+    //     state: NumberInt("1"),
+    //     pushPen: [],
+    //     currentRound: NumberInt("1"),
+    //     __v: NumberInt("0")
+    // });
     // let UserInfo = await User.find().exec()
     // //写入测试数据
     // let scoreId = 100001
@@ -399,14 +471,25 @@ router.get('/show', async(ctx) => {
         if(list) {
             for(let i = 0; i < list.length; i++) {
                 let score = list[i]
+                let username = score.userId.username
+                if(username.length < 3) {
+                    username = username.substring(0, 1) + '*'
+                } else {
+                    let mid = ''
+                    for(let j = 0; j < username.length - 2; j++) {
+                        mid = mid === '' ? '*' : mid + '*'
+                    }
+                    username = username.substring(0, 1) + mid + username.substring(username.length - 2, username.length - 1)
+                }
                 returnData.push({
-                    "username": score.userId.username,
-                    "phone": score.userId.phone,
+                    "username": username,
+                    "phone": score.userId.phone.substring(0, 3) + 'xxxx' + score.userId.phone.substring(7, 11),
                     "rank": (page - 1) * page_size + i + 1,
                     "answer_time": score.answer_time,
                     "answer_number": score.answer_number,
-                    "accuracy": score.accuracy * 100 + '%',
-                    "score": score.score
+                    "accuracy": (score.accuracy * 100).toFixed(2) + '%',
+                    "score": score.score,
+                    "img": score.userId.img
                 })
             }
 
@@ -414,19 +497,79 @@ router.get('/show', async(ctx) => {
         }
 
         const total = await Score.countDocuments(params)
+        const competitionInfo = await Compete.findOne({cId: cid}).exec()
+        const TypeName = {
+            'must': '四人必答赛',
+            'disuse': '双人对战赛',
+            'final': '终极排位赛'
+        }
         ctx.body = util.success({
             "status": 200,
-            "compete_type": "四人必答赛",
+            "compete_type": TypeName[competitionInfo['currentType']],
             "msg": "success",
             page: {
                 ...page, total
             },
             currentRank: info[0]['my'][0] ? info[0]['my'][0]['arrayIndex'] : 0,
+            currentRankInfo: info[0]['my'][0] ? info[0]['my'][0] : [],
             data: returnData
         })
     } catch(e) {
         ctx.body = util.fail(`查询异常${e.stack}`)
     }
+})
+//查询用户当前排名
+router.get('/userRank', async(ctx) => {
+
+    const {uid, cid} = ctx.request.query
+    let info = await Score.aggregate([
+        {
+            $sort: {
+                'score': -1
+            }
+        },
+        {
+            "$group": {
+                "_id": null,
+                "tableA": {
+                    "$push": "$$ROOT"
+                }
+            }
+        },
+        {
+            $unwind: {
+                path: '$tableA',
+                includeArrayIndex: 'arrayIndex'
+            }
+        }, {
+            $project: {
+                '_id': 0,
+                'userId': '$tableA.userId',
+                'score': '$tableA.score',
+                'competeId': '$tableA.competeId',
+                'arrayIndex': {
+                    $add: ['$arrayIndex', 1]
+                }
+            }
+        },
+        {
+            $facet: {
+                'my': [
+                    {
+                        $match: {
+                            "userId": new mongoose.Types.ObjectId(uid),
+                            'competeId': parseInt(cid)
+                        }
+                    }
+                ],
+            }
+        }
+    ])
+    ctx.body = util.success({
+        "status": 200,
+        "msg": "success",
+        myRank: info[0]['my'][0] ? info[0]['my'][0]['arrayIndex'] : 0
+    })
 })
 
 //获取竞赛信息

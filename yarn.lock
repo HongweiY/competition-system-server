@@ -574,6 +574,13 @@ collection-visit@^1.0.0:
     map-visit "^1.0.0"
     object-visit "^1.0.0"
 
+collections@^3.0.0:
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/collections/-/collections-3.0.0.tgz#27e3894df1b24cedfc55a1bbb0c0da12f68bab31"
+  integrity sha512-ZcLwSBMEktp13cgsNTQGMVDoIKF6y2L7+0l3Ur6G3miB++aRpgiz7Hc4vvChtbALY7ce6LdUPnkw5goKQTmjdg==
+  dependencies:
+    weak-map "~1.0.x"
+
 color-convert@^1.9.0:
   version "1.9.3"
   resolved "https://registry.yarnpkg.com/color-convert/-/color-convert-1.9.3.tgz#bb71850690e1f136567de629d2d5471deda4c1e8"
@@ -1153,6 +1160,14 @@ esutils@^2.0.2:
   version "2.0.3"
   resolved "https://registry.yarnpkg.com/esutils/-/esutils-2.0.3.tgz#74d2eb4de0b8da1293711910d50775b9b710ef64"
   integrity sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g==
+
+excel-export@^0.5.1:
+  version "0.5.1"
+  resolved "https://registry.yarnpkg.com/excel-export/-/excel-export-0.5.1.tgz#6d08787f98b2ec931e4b3dcff18cc9083bbb8b77"
+  integrity sha512-n91jamb9DG6AYyK0OvshesI3XYd4umCMmx0qb0+LqG/cxyP5+RhVPTY4+ZCgEUwi79pjOjfzBN9Nocjm6EleAQ==
+  dependencies:
+    collections "^3.0.0"
+    node-zip "1.x"
 
 execa@^0.7.0:
   version "0.7.0"
@@ -2007,6 +2022,13 @@ jstransformer@1.0.0:
     is-promise "^2.0.0"
     promise "^7.0.1"
 
+jszip@2.5.0:
+  version "2.5.0"
+  resolved "https://registry.yarnpkg.com/jszip/-/jszip-2.5.0.tgz#7444fd8551ddf3e5da7198fea0c91bc8308cc274"
+  integrity sha512-IRoyf8JSYY3nx+uyh5xPc0qdy8pUDTp2UkHOWYNF/IO/3D8nx7899UlSAjD8rf8wUgOmm0lACWx/GbW3EaxIXQ==
+  dependencies:
+    pako "~0.2.5"
+
 jwa@^1.4.1:
   version "1.4.1"
   resolved "https://registry.yarnpkg.com/jwa/-/jwa-1.4.1.tgz#743c32985cb9e98655530d53641b66c8645b039a"
@@ -2517,6 +2539,13 @@ negotiator@0.6.3:
   resolved "https://registry.yarnpkg.com/negotiator/-/negotiator-0.6.3.tgz#58e323a72fedc0d6f9cd4d31fe49f51479590ccd"
   integrity sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg==
 
+node-zip@1.x:
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/node-zip/-/node-zip-1.1.1.tgz#94d1ad674a3cd46a1588dd736f4a9a78c757eb62"
+  integrity sha512-sXfGL65EcaAJqNSXxuyf//i4D4geUtJgZDYUd7IBo2/CH8XY8vcWh1+CBCxuVVyR+S4vAFc3hr//JkCi2+V5vg==
+  dependencies:
+    jszip "2.5.0"
+
 nodemon@^1.19.1:
   version "1.19.4"
   resolved "https://registry.yarnpkg.com/nodemon/-/nodemon-1.19.4.tgz#56db5c607408e0fdf8920d2b444819af1aae0971"
@@ -2709,6 +2738,11 @@ package-json@^4.0.0:
     registry-auth-token "^3.0.1"
     registry-url "^3.0.3"
     semver "^5.1.0"
+
+pako@~0.2.5:
+  version "0.2.9"
+  resolved "https://registry.yarnpkg.com/pako/-/pako-0.2.9.tgz#f3f7522f4ef782348da8161bad9ecfd51bf83a75"
+  integrity sha512-NUcwaKxUxWrZLpDG+z/xZaCgQITkA/Dv4V/T6bw7VON6l1Xz/VnrBqrYjZQ12TamKHzITTfOEIYUj48y2KXImA==
 
 parent-module@^1.0.0:
   version "1.0.1"
@@ -3697,6 +3731,11 @@ void-elements@^2.0.1:
   version "2.0.1"
   resolved "https://registry.yarnpkg.com/void-elements/-/void-elements-2.0.1.tgz#c066afb582bb1cb4128d60ea92392e94d5e9dbec"
   integrity sha1-wGavtYK7HLQSjWDqkjkulNXp2+w=
+
+weak-map@~1.0.x:
+  version "1.0.8"
+  resolved "https://registry.yarnpkg.com/weak-map/-/weak-map-1.0.8.tgz#394c18a9e8262e790544ed8b55c6a4ddad1cb1a3"
+  integrity sha512-lNR9aAefbGPpHO7AEnY0hCFjz1eTkWCXYvkTRrTHs9qv8zJp+SkVYpzfLIFXQQiG3tVvbNFQgVg2bQS8YGgxyw==
 
 webidl-conversions@^7.0.0:
   version "7.0.0"

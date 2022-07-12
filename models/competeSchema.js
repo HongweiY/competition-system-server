@@ -12,6 +12,14 @@ const competeSchema = new Schema({
     create_username: String,
     startTime: String,
     endTime: String,
+    finalUser:{ //决赛人数
+      type:Number,
+      default:100
+    },
+    screenings: {
+        type: Number,
+        default: 3
+    },
     currentType: {
         type: String,
         default: 'must'

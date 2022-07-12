@@ -7,6 +7,9 @@ const Pen = require('../models/penSchema')
 const path = require('path')
 const Counter = require('../models/counterSchema')
 const {utils, readFile} = require('xlsx');
+const jwt = require("jsonwebtoken");
+const util = require("../utils/util");
+const User = require("../models/userSchema");
 const downPath = path.resolve(__dirname, '../../public/uploads');
 
 router.prefix('/pens')
@@ -37,7 +40,7 @@ router.post('/import', async(ctx) => {
                     answer = answer ? answer + ',' + chooseOptions[strings] : chooseOptions[strings]
                 }
             } else {
-                answer = chooseOptions[data['答案']-1]
+                answer = chooseOptions[data['答案'] - 1]
             }
 
             let option = []
@@ -63,12 +66,54 @@ router.post('/import', async(ctx) => {
             penId++
 
         }
-        await Pen.create(insertData)
-        ctx.body = {data: insertData}
+        const res = await Pen.create(insertData)
+        if(res) {
+            ctx.body = util.success({}, `成功导入${insertData.length}成功数据`)
+        } else {
+            ctx.body = util.fail('账号密码不正确')
+        }
 
 
     }
 )
 
+router.get('/list', async(ctx) => {
+    const {penTitle, type} = ctx.request.query
+    const {page, skipIndex} = util.pager(ctx.request.query)
+    const params = {}
+    if(penTitle) {
+        params.stem = {
+            $regex: penTitle, $options: 'i'
+        }
+    }
+    if(type) {
+        params.penType = {
+            $eq: type
+        }
+    }
+
+    try {
+        const list = await Pen.find(params, {}, {skip: skipIndex, limit: page.pageSize}).exec()
+        const total = await Pen.countDocuments(params)
+        ctx.body = util.success({
+            page: {
+                ...page, total
+            },
+            list
+        })
+    } catch(e) {
+        ctx.body = util.fail(`查询异常${e.stack}`)
+    }
+})
+
+router.post('/delete', async(ctx) => {
+    const {ids} = ctx.request.body
+    const res = await Pen.deleteMany({_id: {$in: ids}}, {state: 2})
+    if(res) {
+        ctx.body = util.success(res, `共删除${res.matchedCount}条`)
+        return
+    }
+    ctx.body = util.fail('删除失败')
+})
 
 module.exports = router

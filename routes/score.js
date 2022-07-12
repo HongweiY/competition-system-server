@@ -34,15 +34,32 @@ const DisuseTime = 20 * 60
 
 //成绩列表
 router.get('/list', async(ctx) => {
-    const {competeId} = ctx.request.query
+    const {competeId, username} = ctx.request.query
     const {page, skipIndex} = util.pager(ctx.request.query)
     const params = {
-        competeId
+        competeId: parseInt(competeId)
     }
+    if(username) {
+        const users = await User.find({username: {$regex: username, $options: 'i'}})
+        let userIds = []
+        if(users) {
+            for(const user of users) {
+                userIds.push(user._id)
+            }
+
+        }
+        if(userIds) {
+            params.userId = {
+                $in: userIds
+            }
+        }
+    }
+
     try {
+
         const list = await Score.find(params, '', {
             skip: skipIndex, limit: page.pageSize
-        }).populate('user', {username: 1}).exec()
+        }).populate(['userId']).sort({score: -1}).exec()
         const total = await Score.countDocuments(params)
         ctx.body = util.success({
             page: {
@@ -52,6 +69,55 @@ router.get('/list', async(ctx) => {
     } catch(e) {
         ctx.body = util.fail(`查询异常${e.stack}`)
     }
+})
+
+router.get('/exportScore', async(ctx) => {
+    const {competeId} = ctx.request.query
+    if(!competeId) {
+        ctx.body = util.fail('请选择需要导出成绩的竞赛')
+    }
+    const params = {
+        competeId: parseInt(competeId)
+    }
+    //根据比赛模式导出对应的成绩
+    const competitionInfo = await Compete.findOne({cId: competeId})
+    if(competitionInfo.screenings === 2) {
+        //根据分数表导出成绩
+        try {
+            const list = await Score.find(params, {_id: 0, competeId: 0, createTime: 0, __v: 0}, {
+                limit: 100
+            }).populate('userId', 'username-_id,city,depart,phone').sort({score: -1}).exec()
+
+            ctx.body = util.success({
+                list,
+                competitionInfo
+            })
+        } catch(e) {
+            ctx.body = util.fail(`查询异常${e.stack}`)
+        }
+    } else {
+        //根据终极排位赛导出前100名
+        try {
+            const list = await FinalUser.find(params, {
+                    _id: 0,
+                    userId: 0,
+                    img: 0,
+                    cid: 0,
+                    createTime: 0,
+                    __v: 0,
+                    isChallenger: 0
+                }
+            ).sort({rank: 1}).exec()
+            ctx.body = util.success({
+                list,
+                competitionInfo
+            })
+        } catch(e) {
+            ctx.body = util.fail(`查询异常${e.stack}`)
+        }
+    }
+
+
 })
 
 /**
@@ -87,8 +153,7 @@ router.post('/checkAnswer', async(ctx) => {
         answerLog = await AnswerLog.countDocuments({uid, roomId, rounds, type, cid, penId})
     } else {
         answerLog = await AnswerLog.countDocuments({
-            uid,
-            rounds,
+            uid: userInfo.userId,
             cid,
             penId,
             type: type + '-' + competeInfo['finalRounds'] + '-' + rounds
@@ -101,7 +166,6 @@ router.post('/checkAnswer', async(ctx) => {
     }
     //判断答题时候正确
     let isRight
-    console.log(score)
     if(score > -1) {
         //场景题
         isRight = score === 1;
@@ -119,12 +183,14 @@ router.post('/checkAnswer', async(ctx) => {
         }
     }
     if(type === 'final') {
-        const canGo = util.canGoFinal(uid, cid)
+        const canGo = await util.canGoFinal(uid, cid)
         if(!canGo) {
             ctx.body = util.success({'code': 401, 'msg': '无答题资格'})
             return false
         }
+
     }
+
     if(type === 'must' || type === 'disuse') {
         //记录日志
         await AnswerLog.create({
@@ -135,13 +201,12 @@ router.post('/checkAnswer', async(ctx) => {
         await util.noteRoomLog({uid, roomId, rounds, cId: cid, isRight, useTime, type})
         await util.answerInfo(roomId, rounds)
     }
-
     //更新积分
     switch(type) {
         case 'must':
             //p判断4人是否完成
             const answerNum = await AnswerLog.countDocuments({$and: [{roomId}, {type}, {cid}, {penId}]}) * 1
-            if(answerNum === 4) {
+            if(answerNum >= 4) {
                 const matchInfo = await Match.findOneAndUpdate({_id: roomId}, {currentRound: rounds + 1}).exec()
                 if(rounds >= 5) {
                     if(matchInfo['state'] == 2) {
@@ -166,8 +231,9 @@ router.post('/checkAnswer', async(ctx) => {
                             }
                             global.ws.send(roomId.toString(), JSON.stringify(msg))
                             ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
-                            return false
+
                         })
+                        return false
                     }
                 } else {
                     await util.pushPen(roomId, cid, 'start')
@@ -176,9 +242,10 @@ router.post('/checkAnswer', async(ctx) => {
             }
             break;
         case 'disuse':
-            const isAnswer = await AnswerLog.countDocuments({$and: [{roomId}, {type}, {cid}, {penId}]}) * 1
+            const isAnswer = await AnswerLog.countDocuments({roomId, rounds, type, cid, penId})
             if(isAnswer >= 1) {
                 //计算得分
+                console.log('下一轮')
                 const roomLog = await RoomLog.findOne({$and: [{roomId}, {type}, {cid}]}).exec()
                 //更改状态
                 await noteScore({
@@ -186,7 +253,6 @@ router.post('/checkAnswer', async(ctx) => {
                 })
                 //修改当前聊天状态
                 await Match.findOneAndUpdate({_id: roomId}, {state: 3}).then(async(matchInfo) => {
-
                     const $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId]}})
                     for(const userInfo of $allUsers) {
                         const returnRounds = await RoomLog.countDocuments({
@@ -195,24 +261,22 @@ router.post('/checkAnswer', async(ctx) => {
                         //通知客户端进行下一轮匹配
                         const msg = {
                             'event': 'matchMewRoom', 'message': {
-                                rounds: returnRounds + 2
+                                rounds: returnRounds + 1
                             }
                         }
-                        global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
+                        global.ws.send('', JSON.stringify(msg), userInfo.userId)
                         ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
-                        return false
+
                     }
+                    return false
                 })
             }
             break;
         case 'final':
-
             // 根据轮次判断答题，
             // 第1轮 31-65中一人  66-100所有人 参加
-
             //第2轮 11-35中一人   66-100所有人 参加
             //第3轮  1-15 中一人   66-100所有人 参加
-
             //第4轮 只能一人，用户是不是挑战者，挑战者没赢，结束答题
             //第5、6轮只能一人答题
             const userInfo = await FinalUser.findOne({userId: uid, cid}).exec()
@@ -220,49 +284,45 @@ router.post('/checkAnswer', async(ctx) => {
             //重复答题
             await AnswerLog.create({
                 uid: userInfo.userId, penId, cid, postAnswer: answer,//标签
-                isRight, useTime,  type: type + '-' + competeInfo['finalRounds'] + '-' + rounds
+                isRight, useTime, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds
             })
+            const penInfo = await Pen.findOne({penId})
+            //记录信息，同时计算正确率等信息
+            await FinalUser.updateOne({userId: uid, cid}, {
+                answer_time: userInfo.answer_time + useTime,
+                answer_number: userInfo.answer_number + 1,
+                accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
+            })
+            //判断终极排位赛人数
+            const finalUser = competeInfo['finalUser']
+            let spacingCount = 5
+            if(finalUser === 60) {
+                spacingCount = 4
+            }
             switch(competeInfo['finalRounds']) {
                 case 1:
-                    if(rank > 65) {
-                        //记录信息，同时计算正确率等信息
-                        await FinalUser.updateOne({userId: uid, cid}, {
-                            answer_time: userInfo.answer_time + useTime,
-                            answer_number: userInfo.answer_number + 1,
-                            accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                        })
-
-                    } else {
+                    if(rank <= finalUser * 0.6 + spacingCount) {
                         //用户答对提升一名，如果答错下降一名 31名不再上升，65名不再下降
                         if(isRight) {
-                            if(rank !== 31) {
+                            if(rank !== finalUser * 0.3 + 1) {
                                 const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
-                                await FinalUser.updateOne({userId: uid, cid}, {
-                                    rank: rank - 1,
-                                    answer_time: userInfo.answer_time + useTime,
-                                    answer_number: userInfo.answer_number + 1,
-                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                })
+                                await FinalUser.updateOne({userId: uid, cid}, {rank: rank - 1})
                                 await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
                             }
                         } else {
-                            if(rank !== 65) {
+                            if(rank !== finalUser * 0.6 + spacingCount) {
                                 const upUserInfo = await FinalUser.findOne({rank: rank + 1, cid})
-                                await FinalUser.updateOne({userId: uid, cid}, {
-                                    rank: rank + 1,
-                                    answer_time: userInfo.answer_time + useTime,
-                                    answer_number: userInfo.answer_number + 1,
-                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                })
-                                await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
+                                await FinalUser.updateOne({userId: uid, cid}, {rank: rank + 1})
+                                if(upUserInfo) {
+                                    await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
+                                }
+
                             }
                         }
-
                         const finalPenLog = await FinalPenLogSchema.find({
                             cid: cid, round: 1
                         }).sort({penNumber: -1}).limit(1).exec()
-
-                        if(finalPenLog && finalPenLog[0]['penNumber'] >= 35) {
+                        if(finalPenLog && finalPenLog[0]['penNumber'] >= finalUser * 0.3 + spacingCount) {
                             Compete.updateOne({cId: cid}, {finalRounds: 2}).exec().then(async() => {
                                 await pushFinalPen(cid)
                             })
@@ -274,36 +334,20 @@ router.post('/checkAnswer', async(ctx) => {
                     break;
                 case 2:
                     //第2轮 11-35  66-100 参加
-                    if(rank > 65) {
-                        //记录信息，同时计算正确率等信息
-                        await FinalUser.updateOne({userId: uid, cid}, {
-                            answer_time: userInfo.answer_time + useTime,
-                            answer_number: userInfo.answer_number + 1,
-                            accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                        })
-                    } else {
+                    if(rank <= finalUser * 0.3 + spacingCount) {
                         //用户答对提升一名，如果答错下降一名 31名不再上升，65名不再下降
                         if(isRight) {
-                            if(rank !== 11) {
+                            if(rank !== finalUser * 0.1 + 1) {
                                 const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
-                                await FinalUser.updateOne({userId: uid, cid}, {
-                                    rank: rank - 1,
-                                    answer_time: userInfo.answer_time + useTime,
-                                    answer_number: userInfo.answer_number + 1,
-                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                })
-
-                                await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                await FinalUser.updateOne({userId: uid, cid}, {rank: rank - 1})
+                                if(downUserInfo) {
+                                    await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                }
                             }
                         } else {
-                            if(rank !== 35) {
+                            if(rank !== finalUser * 0.3 + spacingCount) {
                                 const upUserInfo = await FinalUser.findOne({rank: rank + 1, cid})
-                                await FinalUser.updateOne({userId: uid, cid}, {
-                                    rank: rank + 1,
-                                    answer_time: userInfo.answer_time + useTime,
-                                    answer_number: userInfo.answer_number + 1,
-                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                })
+                                await FinalUser.updateOne({userId: uid, cid}, {rank: rank + 1})
                                 await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
                             }
                         }
@@ -311,7 +355,7 @@ router.post('/checkAnswer', async(ctx) => {
                             cid: cid, round: 2
                         }).sort({penNumber: -1}).limit(1).exec()
 
-                        if(finalPenLog && finalPenLog[0]['penNumber'] >= 25) {
+                        if(finalPenLog && finalPenLog[0]['penNumber'] >= finalUser * 0.2 + spacingCount) {
                             Compete.updateOne({cId: cid}, {finalRounds: 3}).exec().then(async() => {
                                 await pushFinalPen(cid)
                             })
@@ -324,36 +368,18 @@ router.post('/checkAnswer', async(ctx) => {
                 case 3:
                     //第3轮 1-15 66-100 参加
                     //第2轮 11-35  66-100 参加
-                    if(rank > 65) {
-                        //记录信息，同时计算正确率等信息
-                        await FinalUser.updateOne({userId: uid, cid}, {
-                            answer_time: userInfo.answer_time + useTime,
-                            answer_number: userInfo.answer_number + 1,
-                            accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                        })
-                    } else {
+                    if(rank <= finalUser * 0.1 + spacingCount) {
                         //用户答对提升一名，如果答错下降一名 31名不再上升，65名不再下降
                         if(isRight) {
                             if(rank !== 1) {
                                 const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
-                                await FinalUser.updateOne({userId: uid, cid}, {
-                                    rank: rank - 1,
-                                    answer_time: userInfo.answer_time + useTime,
-                                    answer_number: userInfo.answer_number + 1,
-                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                })
-
+                                await FinalUser.updateOne({userId: uid, cid}, {rank: rank - 1})
                                 await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
                             }
                         } else {
-                            if(rank !== 15) {
+                            if(rank !== finalUser * 0.1 + spacingCount) {
                                 const upUserInfo = await FinalUser.findOne({rank: rank + 1, cid})
-                                await FinalUser.updateOne({userId: uid, cid}, {
-                                    rank: rank + 1,
-                                    answer_time: userInfo.answer_time + useTime,
-                                    answer_number: userInfo.answer_number + 1,
-                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                })
+                                await FinalUser.updateOne({userId: uid, cid}, {rank: rank + 1})
                                 await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
                             }
                         }
@@ -361,21 +387,21 @@ router.post('/checkAnswer', async(ctx) => {
                             cid: cid, round: 3
                         }).sort({penNumber: -1}).limit(1).exec()
 
-                        if(finalPenLog && finalPenLog[0]['penNumber'] >= 15) {
+                        if(finalPenLog && finalPenLog[0]['penNumber'] >= finalUser * 0.1 + spacingCount) {
                             await util.pushFinalInfo(3, cid)
+                            await FinalUser.updateOne({rank: finalUser * 0.6 + spacingCount + 1, cid}, {
+                                rank: finalUser + 1
+                            })
                             await Compete.updateOne({cId: cid}, {finalRounds: 4}).exec()
                             //确定挑战zhe
                             const changeUser = await FinalUser.find({
                                 cid,
-                                rank: {$gt: 65}
+                                rank: {$gt: finalUser * 0.6 + spacingCount}
                             }).sort({accuracy_number: -1}).limit(1)
                             //查询
-                            await FinalUser.updateOne({rank: 66, cid}, {
-                                rank: 101
-                            })
                             await FinalUser.updateOne({userId: changeUser[0].userId, cid}, {
                                 isChallenger: true,
-                                rank: 66
+                                rank: finalUser * 0.6 + spacingCount + 1
                             })
                             await pushFinalPen(cid)
                         } else {
@@ -387,95 +413,378 @@ router.post('/checkAnswer', async(ctx) => {
                     break;
                 case 4:
                     //第4轮
-                    // 第一题 66 vs 60 第二题 66 vs 59 。。。。。
-                    await AnswerLog.create({
-                        uid: userInfo.userId, penId, cid, postAnswer: answer,//标签
-                        isRight, useTime, type: type + '1-' + rounds
-                    })
-                    if(isRight && userInfo['isChallenger']) {
-                        //挑战成功,
-                        //判断是不是第一次
-                        const finalPenLogCount = await FinalPenLogSchema.countDocuments({cid: cid, round: 4})
-                        if(finalPenLogCount == 1) {
-                            const downUserInfo = await FinalUser.findOne({rank:60, cid})
+                    //场景题需要两人提交，比较分数
+                    if(penInfo.penType === '场景题') {
+                        // 需要等待两人答题完毕
+                        const answerLogs = await AnswerLog.find({
+                            penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds
+                        })
+                        //回答完毕，判断得分
+                        if(answerLogs.length >= 2) {
+                            //查询挑战者
+                            const challengerUser = await FinalUser.findOne({cid: cid, isChallenger: true})
+                            let challengerScore = 0;
+                            let challengerTime = 0;
+                            let otherScore = 0;
+                            let otherTime = 0;
+                            for(const answerLog of answerLogs) {
+                                if(answerLog.uid === challengerUser.userId) {
+                                    challengerScore = parseInt(answerLog.postAnswer)
+                                    challengerTime = parseInt(answerLog.useTime)
+                                } else {
+                                    otherScore = parseInt(answerLog.postAnswer)
+                                    otherTime = parseInt(answerLog.useTime)
+                                }
+                            }
+                            //挑战成功
+                            if(challengerScore > otherScore) {
+                                //判断是不是第一次
+                                const finalPenLogCount = await FinalPenLogSchema.countDocuments({cid: cid, round: 4})
+                                if(finalPenLogCount === 1) {
+                                    const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
+                                    await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                    await FinalUser.updateOne({
+                                        userId: challengerUser.userId,
+                                        cid
+                                    }, {rank: finalUser * 0.6})
+                                } else {
+                                    const downUserInfo = await FinalUser.findOne({rank: challengerUser.rank - 1, cid})
+                                    await FinalUser.updateOne({
+                                        userId: downUserInfo.userId,
+                                        cid
+                                    }, {rank: challengerUser.rank})
+                                    await FinalUser.updateOne({
+                                        userId: challengerUser.userId,
+                                        cid
+                                    }, {rank: downUserInfo.rank})
+                                }
+                                //向下一位发送题目
+                                //判断是不是到第一名
+                                if(rank === 2) {
+                                    await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                                }
+                                await pushFinalPen(cid)
+                                if(challengerUser.userId === uid) {
+                                    ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                                } else {
+                                    ctx.body = util.success({code: 200, msg: "很遗憾，对手挑战成功"}, '守位失败')
+                                }
 
-                            await FinalUser.updateOne({userId: uid, cid}, {
-                                rank: 60,
-                                answer_time: userInfo.answer_time + useTime,
-                                answer_number: userInfo.answer_number + 1,
-                                accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                            })
-                            await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
-                        }else {
-                            const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
+                            } else if(challengerScore === otherScore) {//分数相等，判断时间
+                                if(challengerTime < otherTime) {
+                                    const finalPenLogCount = await FinalPenLogSchema.countDocuments({
+                                        cid: cid,
+                                        round: 4
+                                    })
+                                    if(finalPenLogCount === 1) {
+                                        const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
+                                        await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                        await FinalUser.updateOne({
+                                            userId: challengerUser.userId,
+                                            cid
+                                        }, {rank: finalUser * 0.6})
+                                    } else {
+                                        const downUserInfo = await FinalUser.findOne({
+                                            rank: challengerUser.rank - 1,
+                                            cid
+                                        })
+                                        await FinalUser.updateOne({
+                                            userId: downUserInfo.userId,
+                                            cid
+                                        }, {rank: challengerUser.rank})
+                                        await FinalUser.updateOne({
+                                            userId: challengerUser.userId,
+                                            cid
+                                        }, {rank: downUserInfo.rank})
+                                    }
+                                    //向下一位发送题目
+                                    //判断是不是到第一名
+                                    if(rank === 2) {
+                                        await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                                    }
+                                    await pushFinalPen(cid)
+                                    if(challengerUser.userId === uid) {
+                                        ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                                    } else {
+                                        ctx.body = util.success({code: 200, msg: "很遗憾，对手挑战成功"}, '守位失败')
+                                    }
+                                } else {
+                                    //挑战失败
+                                    //取消当前用户挑战这生命
+                                    await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
+                                    //更改比赛终极排位赛轮次
+                                    await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                                    await pushFinalPen(cid)
+                                    await util.pushFinalInfo(4, cid)
+                                    if(challengerUser.userId === uid) {
+                                        ctx.body = util.success({code: 200, msg: "很遗憾,挑战失败"}, '挑战失败')
+                                    } else {
+                                        ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                                    }
+                                }
 
-                            await FinalUser.updateOne({userId: uid, cid}, {
-                                rank: rank - 1,
-                                answer_time: userInfo.answer_time + useTime,
-                                answer_number: userInfo.answer_number + 1,
-                                accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                            })
-                            await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                            } else {
+                                //挑战失败
+                                //取消当前用户挑战这生命
+                                await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
+                                //更改比赛终极排位赛轮次
+                                await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                                await pushFinalPen(cid)
+                                await util.pushFinalInfo(4, cid)
+                                if(challengerUser.userId === uid) {
+                                    ctx.body = util.success({code: 200, msg: "很遗憾,挑战失败"}, '挑战失败')
+                                } else {
+                                    ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                                }
+                            }
+                        } else {
+                            ctx.body = util.success({code: 200, msg: "回答完成，等待另一个选手回答"}, '回答完成')
+                            return false
                         }
-
-                        //向下一位发送题目
-                        //判断是不是到第一名
-                        if(rank === 2) {
-                            await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
-                        }
-                        await pushFinalPen(cid)
                     } else {
-                        //取消当前用户挑战这生命
-                        await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
-                        //更改比赛终极排位赛轮次
-                        await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
-                        await pushFinalPen(cid)
-                        await util.pushFinalInfo(4, cid)
-                    }
+                        // 第一题 66 vs 60 第二题 66 vs 59 。。。。。
+                        const challengerUser = await FinalUser.findOne({isChallenger: true, cid: cid})
+                        if(isRight && userInfo['isChallenger']) {
+                            //挑战成功,
+                            //判断是不是第一次
+                            const finalPenLogCount = await FinalPenLogSchema.countDocuments({cid: cid, round: 4})
+                            if(finalPenLogCount <= 1) {
+                                const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
+                                await FinalUser.updateOne({
+                                    userId: downUserInfo.userId,
+                                    cid
+                                }, {rank: finalUser * 0.6 + 1})
+                                await FinalUser.updateOne({userId: uid, cid}, {rank: finalUser * 0.6})
+                            } else {
+                                const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
+                                await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                await FinalUser.updateOne({
+                                    userId: challengerUser.userId,
+                                    cid
+                                }, {rank: downUserInfo.rank})
+                            }
+                            //向下一位发送题目
+                            //判断是不是到第一名
+                            if(rank === 2) {
+                                await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                            }
+                            await pushFinalPen(cid)
+                            if(challengerUser.userId === uid) {
+                                ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                            } else {
+                                ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                            }
 
-                    break;
+                        } else {
+                            //取消当前用户挑战这生命
+                            await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
+                            //更改比赛终极排位赛轮次
+                            await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                            await pushFinalPen(cid)
+                            await util.pushFinalInfo(4, cid)
+                            if(challengerUser.userId === uid) {
+                                ctx.body = util.success({code: 200, msg: "很遗憾,挑战失败"}, '挑战失败')
+                            } else {
+                                ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                            }
+                        }
+                    }
+                    return false
                 case 5:
                     //第5轮 31 vs 30
-                    await AnswerLog.create({
-                        uid: userInfo.userId, penId, cid, postAnswer: answer,//标签
-                        isRight, useTime, type: type + '1-' + rounds
-                    })
-                    if(isRight && rank === 31) {
-                        const downUserInfo = await FinalUser.findOne({rank: rank - 1})
-                        await FinalUser.updateOne({userId: uid, cid}, {
-                            rank: rank - 1,
-                            answer_time: userInfo.answer_time + useTime,
-                            answer_number: userInfo.answer_number + 1,
-                            accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
+                    if(penInfo.penType === '场景题') {
+                        // 需要等待两人答题完毕
+                        const challengerUser = await FinalUser.findOne({rank: finalUser * 0.3 + 1, cid})
+                        const answerLogs = await AnswerLog.find({
+                            penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds
                         })
-                        await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                        //回答完毕，判断得分
+                        if(answerLogs.length >= 2) {
+                            let challengerScore = 0;
+                            let challengerTime = 0;
+                            let otherScore = 0;
+                            let otherTime = 0;
+
+                            for(const answerLog of answerLogs) {
+                                if(answerLog.uid === challengerUser.userId) {
+                                    challengerScore = parseInt(answerLog.postAnswer)
+                                    challengerTime = parseInt(answerLog.useTime)
+                                } else {
+                                    otherScore = parseInt(answerLog.postAnswer)
+                                    otherTime = parseInt(answerLog.useTime)
+                                }
+                            }
+                            if(challengerScore > otherScore) {
+                                //挑战成功
+                                const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.3, cid})
+                                await FinalUser.updateOne({
+                                    userId: downUserInfo.userId,
+                                    cid
+                                }, {rank: finalUser * 0.3 + 1})
+                                await FinalUser.updateOne({userId: challengerUser.userId, cid}, {rank: finalUser * 0.3})
+                                if(challengerUser.userId === uid) {
+                                    ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                                } else {
+                                    ctx.body = util.success({code: 200, msg: "很遗憾，守位失败"}, '守位失败')
+                                }
+                            } else if(challengerScore === otherScore) {//分数相等，判断时间
+                                if(challengerTime < otherTime) {
+                                    const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.3, cid})
+                                    await FinalUser.updateOne({
+                                        userId: downUserInfo.userId,
+                                        cid
+                                    }, {rank: finalUser * 0.3 + 1})
+                                    await FinalUser.updateOne({
+                                        userId: challengerUser.userId,
+                                        cid
+                                    }, {rank: finalUser * 0.3})
+                                    if(challengerUser.userId === uid) {
+                                        ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                                    } else {
+                                        ctx.body = util.success({code: 200, msg: "很遗憾，守位失败"}, '守位失败')
+                                    }
+                                }
+                            } else {
+                                if(challengerUser.userId === uid) {
+                                    ctx.body = util.success({code: 200, msg: "很遗憾,挑战失败"}, '挑战失败')
+                                } else {
+                                    ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                                }
+                            }
+                            await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
+                            await pushFinalPen(cid)
+                            await util.pushFinalInfo(5, cid)
+                            return false
+                        } else {
+                            ctx.body = util.success({code: 200, msg: "回答完成，等待另一个选手回答"}, '回答完成')
+                            return false
+                        }
+                    } else {
+                        const challengerUser = await FinalUser.findOne({rank: finalUser * 0.3 + 1, cid})
+                        if(isRight && rank === finalUser * 0.3 + 1) {
+                            const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.3, cid})
+                            await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: finalUser * 0.3 + 1})
+                            await FinalUser.updateOne({userId: uid, cid}, {rank: rank})
+                            if(challengerUser.userId === uid) {
+                                ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                            } else {
+                                ctx.body = util.success({code: 200, msg: "很遗憾，守位失败"}, '守位失败')
+                            }
+                        } else {
+                            const challengerUser = await FinalUser.findOne({rank: finalUser * 0.3 + 1, cid})
+                            if(challengerUser.userId === uid) {
+                                ctx.body = util.success({code: 200, msg: "很遗憾,挑战失败"}, '挑战失败')
+                            } else {
+                                ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                            }
+                        }
+                        await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
+                        await pushFinalPen(cid)
+                        await util.pushFinalInfo(5, cid)
+
                     }
-                    await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
-                    await pushFinalPen(cid)
-                    await util.pushFinalInfo(5, cid)
-                    break;
+                    return false
                 case 6:
-                    await AnswerLog.create({
-                        uid: userInfo.userId, penId, cid, postAnswer: answer,//标签
-                        isRight, useTime, type: type + '1-' + rounds
-                    })
-                    if(isRight && rank === 11) {
-                        //挑战成功，进入下一轮
-                        const downUserInfo = await FinalUser.findOne({rank: rank - 1})
-                        await FinalUser.updateOne({userId: uid, cid}, {
-                            rank: rank - 1,
-                            answer_time: userInfo.answer_time + useTime,
-                            answer_number: userInfo.answer_number + 1,
-                            accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
+
+                    if(penInfo.penType === '场景题') {
+                        // 需要等待两人答题完毕
+                        const challengerUser = await FinalUser.findOne({rank: finalUser * 0.1 + 1, cid})
+                        const answerLogs = await AnswerLog.find({
+                            penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds
                         })
-                        await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                        //回答完毕，判断得分
+                        if(answerLogs.length >= 2) {
+                            let challengerScore = 0;
+                            let challengerTime = 0;
+                            let otherScore = 0;
+                            let otherTime = 0;
+
+                            for(const answerLog of answerLogs) {
+                                if(answerLog.uid === challengerUser.userId) {
+                                    challengerScore = parseInt(answerLog.postAnswer)
+                                    challengerTime = parseInt(answerLog.useTime)
+                                } else {
+                                    otherScore = parseInt(answerLog.postAnswer)
+                                    otherTime = parseInt(answerLog.useTime)
+                                }
+                            }
+                            if(challengerScore > otherScore) {
+                                //挑战成功
+                                const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.1, cid})
+                                await FinalUser.updateOne({
+                                    userId: downUserInfo.userId,
+                                    cid
+                                }, {rank: finalUser * 0.1 + 1})
+                                await FinalUser.updateOne({userId: challengerUser.userId, cid}, {rank: finalUser * 0.1})
+                                if(challengerUser.userId === uid) {
+                                    ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                                } else {
+                                    ctx.body = util.success({code: 200, msg: "很遗憾，守位失败"}, '守位失败')
+                                }
+                            } else if(challengerScore === otherScore) {//分数相等，判断时间
+                                if(challengerTime < otherTime) {
+                                    const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.1, cid})
+                                    await FinalUser.updateOne({
+                                        userId: downUserInfo.userId,
+                                        cid
+                                    }, {rank: finalUser * 0.1 + 1})
+                                    await FinalUser.updateOne({
+                                        userId: challengerUser.userId,
+                                        cid
+                                    }, {rank: finalUser * 0.1})
+                                    if(challengerUser.userId === uid) {
+                                        ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                                    } else {
+                                        ctx.body = util.success({code: 200, msg: "很遗憾，守位失败"}, '守位失败')
+                                    }
+                                } else {
+
+                                    if(challengerUser.userId === uid) {
+                                        ctx.body = util.success({code: 200, msg: "很遗憾,挑战失败"}, '挑战失败')
+                                    } else {
+                                        ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                                    }
+                                }
+                            } else {
+                                if(challengerUser.userId === uid) {
+                                    ctx.body = util.success({code: 200, msg: "很遗憾,挑战失败"}, '挑战失败')
+                                } else {
+                                    ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                                }
+                            }
+                            await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
+                            await pushFinalPen(cid)
+                            await util.pushFinalInfo(6, cid)
+                            return false
+                        } else {
+                            ctx.body = util.success({code: 200, msg: "回答完成，等待另一个选手回答"}, '回答完成')
+                            return false
+                        }
+                    } else {
+                        const challengerUser = await FinalUser.findOne({rank: finalUser * 0.1 + 1, cid})
+                        if(isRight && rank === finalUser * 0.1 + 1) {
+                            const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.1, cid})
+                            await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: finalUser * 0.1 + 1})
+                            await FinalUser.updateOne({userId: uid, cid}, {rank: rank})
+                            if(challengerUser.userId === uid) {
+                                ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
+                            } else {
+                                ctx.body = util.success({code: 200, msg: "很遗憾，守位失败"}, '守位失败')
+                            }
+                        } else {
+                            const challengerUser = await FinalUser.findOne({rank: finalUser * 0.1 + 1, cid})
+                            if(challengerUser.userId === uid) {
+                                ctx.body = util.success({code: 200, msg: "很遗憾,挑战失败"}, '挑战失败')
+                            } else {
+                                ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
+                            }
+                        }
+                        await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
+                        await pushFinalPen(cid)
+                        await util.pushFinalInfo(6, cid)
                     }
-                    await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
-                    await pushFinalPen(cid)
-                    await util.pushFinalInfo(5, cid)
+                    return false
             }
-
-
             break;
     }
     if(isRight) {
@@ -490,66 +799,86 @@ router.post('/checkAnswer', async(ctx) => {
  * 时间到了，提交答案
  */
 router.post('/timeOutAnswer', async(ctx) => {
-    const {cid, roomId, type, useTime, rounds} = ctx.request.body
+    const {cid, roomId, type, useTime, rounds, penId} = ctx.request.body
     const {authorization} = ctx.request.headers
     const {userInfo} = jwt.decode(authorization.split(' ')[1])
     const uid = userInfo.userId
     //查询当前比赛状态
     let competeInfo = await Compete.findOne({cId: cid}).exec()
     if(!competeInfo) {
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
         return false
     }
     if(dayjs(competeInfo.endTime).isBefore(dayjs())) {
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
         return false
     }
     if(dayjs(competeInfo.startTime).isAfter(dayjs())) {
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
         return false
     }
     //判断当前竞赛模式是否正确
     if(type !== competeInfo.currentType) {
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
         return false
     }
     //记录当前房间的答题信息
     if(type !== 'final') {
         const MatchInfo = await Match.findOne({_id: roomId, state: 2}).exec()
+        await util.noteRoomLog({uid, roomId, rounds, cId: cid, isRight: false, useTime, type})
         if(!MatchInfo) {
+            const returnRounds = await RoomLog.countDocuments({
+                uid, cId: cid, type: competeInfo['currentType']
+            })
+            //通知客户端进行下一轮匹配
+            const msg = {
+                'event': 'matchMewRoom', 'message': {
+                    rounds: returnRounds + 2
+                }
+            }
+            global.ws.send(roomId.toString(), JSON.stringify(msg), uid)
+            ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
+
             return false;
         }
-        await util.noteRoomLog({uid, roomId, rounds, cId: cid, isRight: false, useTime, type})
-    }
 
+    }
+    const penInfo = await Pen.findOne({penId})
     switch(type) {
         case 'must':
             //必答赛是不是最后一题
+            const MatchInfo = await Match.findOne({_id: roomId, state: 2}).exec()
             await Match.updateOne({_id: roomId}, {currentRound: rounds + 1}).exec()
             if(rounds >= 5) {
-                if(MatchInfo['state'] == 2) {
-                    //计算得分，
-                    const RoomLogs = await RoomLog.find({$and: [{roomId}, {type}, {cid}]}).sort({
-                        rightNumber: -1, useTime: 1
-                    }).exec()
-                    let rank = 0
-                    //修改当前聊天状态
-                    await Match.findOneAndUpdate({_id: roomId}, {state: 3}).then(async() => {
-                        for(const roomLog of RoomLogs) {
-                            await noteScore({
-                                ...roomLog._doc, answerNumber: 5, addScore: mustAddScore[rank]
-                            })
-                            rank++
-                        }
+                //计算得分，
+                const RoomLogs = await RoomLog.find({$and: [{roomId}, {type}, {cid}]}).sort({
+                    rightNumber: -1, useTime: 1
+                }).exec()
+
+                let rank = 0
+                //修改当前聊天状态
+                await Match.findOneAndUpdate({_id: roomId}, {state: 3}).then(async() => {
+                    for(const roomLog of RoomLogs) {
+                        await noteScore({
+                            ...roomLog._doc, answerNumber: 5, addScore: mustAddScore[rank]
+                        })
+                        rank++
+                        let returnRounds = await RoomLog.countDocuments({
+                            uid: roomLog.uid, cId: cid, type: competeInfo['currentType']
+                        })
                         //通知客户端进行下一轮匹配
                         const msg = {
                             'event': 'matchMewRoom', 'message': {
-                                rounds: rounds + 1
+                                rounds: returnRounds + 2
                             }
                         }
-                        global.ws.send(roomId.toString(), JSON.stringify(msg))
-                        ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
-                        return false
-                    })
-                }
+                        global.ws.send(roomId.toString(), JSON.stringify(msg), roomLog.uid)
+                    }
+
+
+                    ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
+                })
             } else {
-                //分发题目
                 await util.pushPen(roomId, cid, 'start')
                 ctx.body = util.success({'code': 200, 'msg': '马上加载下一题'})
                 return false
@@ -557,17 +886,30 @@ router.post('/timeOutAnswer', async(ctx) => {
             break;
 
         case 'disuse':
-            await Match.findOneAndUpdate({_id: roomId}, {state: 3})
-            const msg = {
-                'event': 'matchMewRoom', 'message': {
-                    rounds: rounds + 1
+            await Match.findOneAndUpdate({_id: roomId}, {state: 3}).then(async(matchInfo) => {
+                const $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId]}})
+                for(const userInfo of $allUsers) {
+                    const returnRounds = await RoomLog.countDocuments({
+                        uid: userInfo.userId, cId: cid, type: competeInfo['currentType']
+                    })
+                    //通知客户端进行下一轮匹配
+                    const msg = {
+                        'event': 'matchMewRoom', 'message': {
+                            rounds: returnRounds + 2
+                        }
+                    }
+                    global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
+                    ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
                 }
-            }
-            global.ws.send(roomId.toString(), JSON.stringify(msg))
-            ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
-            return;
+            })
             break;
         case 'final':
+            //判断终极排位赛人数
+            const finalUser = competeInfo['finalUser']
+            let spacingCount = 5
+            if(finalUser === 60) {
+                spacingCount = 4
+            }
             const can = await util.canGoFinal(uid, cid)
             if(can) {
                 const userInfo = await FinalUser.findOne({userId: uid, cid}).exec()
@@ -577,7 +919,7 @@ router.post('/timeOutAnswer', async(ctx) => {
                         const finalPenLog_1 = await FinalPenLogSchema.find({
                             cid: cid, round: 1
                         }).sort({penNumber: -1}).limit(1).exec()
-                        if(finalPenLog_1 && finalPenLog_1[0]['penNumber'] >= 35) {
+                        if(finalPenLog_1 && finalPenLog_1[0]['penNumber'] >= finalUser * 0.3 + spacingCount) {
                             Compete.updateOne({cId: cid}, {finalRounds: 2}).exec().then(async() => {
                                 await pushFinalPen(cid)
                             })
@@ -589,8 +931,8 @@ router.post('/timeOutAnswer', async(ctx) => {
                         const finalPenLog_2 = await FinalPenLogSchema.find({
                             cid: cid, round: 2
                         }).sort({penNumber: -1}).limit(1).exec()
-                        if(finalPenLog_2 && finalPenLog_2[0]['penNumber'] >= 35) {
-                            Compete.updateOne({cId: cid}, {finalRounds: 2}).exec().then(async() => {
+                        if(finalPenLog_2 && finalPenLog_2[0]['penNumber'] >= finalUser * 0.2 + spacingCount) {
+                            Compete.updateOne({cId: cid}, {finalRounds: 3}).exec().then(async() => {
                                 await pushFinalPen(cid)
                             })
                         } else {
@@ -603,10 +945,24 @@ router.post('/timeOutAnswer', async(ctx) => {
                         const finalPenLog_3 = await FinalPenLogSchema.find({
                             cid: cid, round: 3
                         }).sort({penNumber: -1}).limit(1).exec()
-                        if(finalPenLog_3 && finalPenLog_3[0]['penNumber'] >= 35) {
-                            Compete.updateOne({cId: cid}, {finalRounds: 2}).exec().then(async() => {
-                                await pushFinalPen(cid)
+                        if(finalPenLog_3 && finalPenLog_3[0]['penNumber'] >= finalUser * 0.1 + spacingCount) {
+                            await util.pushFinalInfo(3, cid)
+                            await Compete.updateOne({cId: cid}, {finalRounds: 4}).exec()
+                            //确定挑战zhe
+                            const changeUser = await FinalUser.find({
+                                cid,
+                                rank: {$gt: finalUser * 0.6 + spacingCount}
+                            }).sort({accuracy_number: -1}).limit(1)
+                            //查询
+                            await FinalUser.updateOne({rank: finalUser * 0.6 + spacingCount + 1, cid}, {
+                                rank: finalUser + 1
                             })
+                            await FinalUser.updateOne({userId: changeUser[0].userId, cid}, {
+                                isChallenger: true,
+                                rank: finalUser * 0.6 + spacingCount + 1
+                            })
+                            await pushFinalPen(cid)
+
                         } else {
                             await pushFinalPen(cid)
                         }
@@ -614,20 +970,115 @@ router.post('/timeOutAnswer', async(ctx) => {
                         break;
                     case 4:
                         //第4轮
-                        //取消当前用户挑战这生命
-                        await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
-                        //更改比赛终极排位赛轮次
-                        await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
-                        await pushFinalPen(cid)
-                        break;
+                        if(penInfo.penType === '场景题') {
+                            // 需要等待两人答题完毕
+                            const answerLogs = await AnswerLog.findOne({
+                                penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds, uid
+                            })
+                            // 判断当前用户有没有答题，答题且分数大于0，挑战成功
+                            if(answerLogs && answerLogs.postAnswer > 0 && userInfo['isChallenger']) {
+                                //挑战成功,
+                                //判断是不是第一次
+                                const finalPenLogCount = await FinalPenLogSchema.countDocuments({
+                                    cid: cid,
+                                    round: 4
+                                })
+                                if(finalPenLogCount == 1) {
+                                    const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
+
+                                    await FinalUser.updateOne({userId: uid, cid}, {
+                                        rank: finalUser * 0.6,
+                                        answer_time: userInfo.answer_time + useTime,
+                                        answer_number: userInfo.answer_number + 1,
+                                        accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
+                                    })
+                                    await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                } else {
+                                    const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
+
+                                    await FinalUser.updateOne({userId: uid, cid}, {
+                                        rank: rank - 1,
+                                        answer_time: userInfo.answer_time + useTime,
+                                        answer_number: userInfo.answer_number + 1,
+                                        accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
+                                    })
+                                    await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                }
+                                //判断是不是到第一名
+                                if(rank === 2) {
+                                    await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                                }
+                                //向下一位发送题目
+                                await pushFinalPen(cid)
+                            } else {
+                                await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
+                                //更改比赛终极排位赛轮次
+                                await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                                await pushFinalPen(cid)
+                                break;
+                            }
+                        } else {
+                            //取消当前用户挑战这生命
+                            await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
+                            //更改比赛终极排位赛轮次
+                            await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+                            await pushFinalPen(cid)
+                            break;
+                        }
                     case 5:
                         //第5轮 31 vs 30
-                        await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
-                        await pushFinalPen(cid)
+                        if(penInfo.penType === '场景题') {
+                            // 需要等待两人答题完毕
+                            const answerLogs = await AnswerLog.findOne({
+                                penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds, uid
+                            })
+                            // 判断当前用户有没有答题，答题且分数大于0，挑战成功
+                            if(answerLogs && answerLogs.postAnswer > 0 && rank === finalUser * 0.3 + 1) {
+                                //挑战成功
+                                const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
+                                await FinalUser.updateOne({userId: uid, cid}, {
+                                    rank: rank - 1,
+                                    answer_time: userInfo.answer_time + useTime,
+                                    answer_number: userInfo.answer_number + 1,
+                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
+                                })
+                                await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+
+                            } else {
+                                await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
+                                await pushFinalPen(cid)
+                            }
+                        } else {
+                            await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
+                            await pushFinalPen(cid)
+                        }
                         break;
                     case 6:
-                        await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
-                        await pushFinalPen(cid)
+                        if(penInfo.penType === '场景题') {
+                            // 需要等待两人答题完毕
+                            const answerLogs = await AnswerLog.findOne({
+                                penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds, uid
+                            })
+                            console.log('场景题')
+                            // 判断当前用户有没有答题，答题且分数大于0，挑战成功
+                            if(answerLogs && answerLogs.postAnswer > 0 && rank === finalUser * 0.1 + 1) {
+                                //挑战成功，进入下一轮
+                                const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
+                                await FinalUser.updateOne({userId: uid, cid}, {
+                                    rank: rank - 1,
+                                    answer_time: userInfo.answer_time + useTime,
+                                    answer_number: userInfo.answer_number + 1,
+                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
+                                })
+                                await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                            } else {
+                                await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
+                                await pushFinalPen(cid)
+                            }
+                        } else {
+                            await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
+                            await pushFinalPen(cid)
+                        }
                         break;
                 }
             } else {
@@ -704,12 +1155,19 @@ async function noteScore(params) {
 //推送终极排位赛题目
 async function pushFinalPen(cid) {
     let competeInfo = await Compete.findOne({cId: cid})
-    const finaUsers = await FinalUser.find()
+    const finaUsers = await FinalUser.find({cid})
     //生成题目，写入数据库
-
-    const penInfo = await Pen.aggregate().sample(1)
     const finalRounds = competeInfo['finalRounds']
+    //终极排位赛 第4 5 6轮使用场景题
+    let params = {}
+    if(finalRounds === 4 || finalRounds === 5 || finalRounds === 6) {
+        params.penType = {$in: ['判断', '多选', '单选', '场景题']}
 
+        // params.penType = {$in: ['场景题']}
+    } else {
+        params.penType = {$in: ['判断', '多选', '单选']}
+    }
+    const penInfo = await Pen.aggregate().match(params).sample(1)
     const finalPenLog = await FinalPenLogSchema.find({
         cid: cid, round: finalRounds
     }).sort({penNumber: -1}).limit(1).exec()
@@ -723,19 +1181,20 @@ async function pushFinalPen(cid) {
     await FinalPenLogSchema.create({
         cid: cid,//竞赛id
         round: finalRounds,//轮数
-        penId: penInfo.penId,
-        penInfo: penInfo,//题目
+        penId: penInfo[0].penId,
+        penInfo: penInfo[0],//题目
         penNumber: penRoundsNumber,//第几题
+        pushTime: dayjs().format('YYYY-MM-DD HH:mm:ss')
     })
     //更新题目推送时间和倒计时。
     let countDown = 30
+    //根据题目是否有倒计时自动设置
+    if(penInfo[0]['time'] > 0) {
+        countDown = penInfo[0]['time']
+    }
     for(const finaUser of finaUsers) {
         const canGo = await util.canGoFinal(finaUser.userId, cid)
         if(canGo) {
-
-            console.log(canGo.allNumber,
-                canGo.area,
-                canGo.rank)
             const msg = {
                 'event': 'pushFinalPen',
                 'message': {
@@ -757,6 +1216,8 @@ async function pushFinalPen(cid) {
             global.ws.send('', JSON.stringify(msg), finaUser.userId)
         }
     }
+    //向所有用户推送信息
+    await util.pushCurrentFinalInfo(cid, finalRounds, penRoundsNumber)
 }
 
 
