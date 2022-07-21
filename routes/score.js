@@ -77,7 +77,7 @@ router.get('/exportScore', async(ctx) => {
         ctx.body = util.fail('请选择需要导出成绩的竞赛')
     }
     const params = {
-        competeId: parseInt(competeId)
+        cid: parseInt(competeId)
     }
     //根据比赛模式导出对应的成绩
     const competitionInfo = await Compete.findOne({cId: competeId})
@@ -222,16 +222,20 @@ router.post('/checkAnswer', async(ctx) => {
                                     ...roomLog._doc, answerNumber: 5, addScore: mustAddScore[rank]
                                 })
                                 rank++
-                            }
-                            //通知客户端进行下一轮匹配
-                            const msg = {
-                                'event': 'matchMewRoom', 'message': {
-                                    rounds: rounds + 1
+                                //通知客户端进行下一轮匹配
+                                const msg = {
+                                    'event': 'matchMewRoom', 'message': {
+                                        rounds:  Math.random()
+                                    }
                                 }
+                                //global.ws.send(roomId.toString(), JSON.stringify(msg), roomLog.uid)
+                                global.redisClientPub.publish('newInfo', JSON.stringify({
+                                        roomId:roomId.toString(), msg:msg, uid: roomLog.uid
+                                    }
+                                ))
                             }
-                            global.ws.send(roomId.toString(), JSON.stringify(msg))
+                            await util.setRoomUserStatus(roomId)
                             ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
-
                         })
                         return false
                     }
@@ -242,35 +246,34 @@ router.post('/checkAnswer', async(ctx) => {
             }
             break;
         case 'disuse':
-            const isAnswer = await AnswerLog.countDocuments({roomId, rounds, type, cid, penId})
-            if(isAnswer >= 1) {
-                //计算得分
-                console.log('下一轮')
-                const roomLog = await RoomLog.findOne({$and: [{roomId}, {type}, {cid}]}).exec()
-                //更改状态
-                await noteScore({
-                    ...roomLog._doc, answerNumber: 1, addScore: isRight ? 1 : -1
-                })
-                //修改当前聊天状态
-                await Match.findOneAndUpdate({_id: roomId}, {state: 3}).then(async(matchInfo) => {
-                    const $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId]}})
-                    for(const userInfo of $allUsers) {
-                        const returnRounds = await RoomLog.countDocuments({
-                            uid: userInfo.userId, cId: cid, type: competeInfo['currentType'], roomId: {$ne: roomId}
-                        })
-                        //通知客户端进行下一轮匹配
-                        const msg = {
-                            'event': 'matchMewRoom', 'message': {
-                                rounds: returnRounds + 1
-                            }
+            //计算得分
+            const roomLog = await RoomLog.findOne({$and: [{roomId}, {type}, {cid}]}).exec()
+            //更改状态
+            await noteScore({
+                ...roomLog._doc, answerNumber: 1, addScore: isRight ? 1 : -1
+            })
+            //修改当前聊天状态
+            await Match.findOneAndUpdate({_id: roomId}, {state: 3}).then(async(matchInfo) => {
+                const $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId]}})
+                for(const userInfo of $allUsers) {
+                    //通知客户端进行下一轮匹配
+                    const msg = {
+                        'event': 'matchMewRoom', 'message': {
+                            rounds: Math.random()
                         }
-                        global.ws.send('', JSON.stringify(msg), userInfo.userId)
-                        ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
-
                     }
-                    return false
-                })
-            }
+                    //global.ws.send('', JSON.stringify(msg), userInfo.userId)
+                    global.redisClientPub.publish('newInfo', JSON.stringify({
+                            roomId:'', msg:msg, uid: userInfo.userId
+                        }
+                    ))
+                    ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
+
+                }
+                await util.setRoomUserStatus(roomId)
+                return false
+            })
+
             break;
         case 'final':
             // 根据轮次判断答题，
@@ -806,41 +809,46 @@ router.post('/timeOutAnswer', async(ctx) => {
     //查询当前比赛状态
     let competeInfo = await Compete.findOne({cId: cid}).exec()
     if(!competeInfo) {
-        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常1'})
         return false
     }
     if(dayjs(competeInfo.endTime).isBefore(dayjs())) {
-        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常2'})
         return false
     }
     if(dayjs(competeInfo.startTime).isAfter(dayjs())) {
-        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常3'})
         return false
     }
     //判断当前竞赛模式是否正确
     if(type !== competeInfo.currentType) {
-        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常4'})
         return false
     }
     //记录当前房间的答题信息
     if(type !== 'final') {
+        if(!roomId){
+            return false
+        }
         const MatchInfo = await Match.findOne({_id: roomId, state: 2}).exec()
         await util.noteRoomLog({uid, roomId, rounds, cId: cid, isRight: false, useTime, type})
         if(!MatchInfo) {
-            const returnRounds = await RoomLog.countDocuments({
-                uid, cId: cid, type: competeInfo['currentType']
-            })
             //通知客户端进行下一轮匹配
             const msg = {
                 'event': 'matchMewRoom', 'message': {
-                    rounds: returnRounds + 2
+                    rounds: Math.random()
                 }
             }
-            global.ws.send(roomId.toString(), JSON.stringify(msg), uid)
+            //global.ws.send(roomId.toString(), JSON.stringify(msg), uid)
+            global.redisClientPub.publish('newInfo', JSON.stringify({
+                    roomId:roomId.toString(), msg:msg, uid: uid
+                }
+            ))
             ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
 
             return false;
         }
+        await util.setRoomUserStatus(roomId)
 
     }
     const penInfo = await Pen.findOne({penId})
@@ -863,17 +871,19 @@ router.post('/timeOutAnswer', async(ctx) => {
                             ...roomLog._doc, answerNumber: 5, addScore: mustAddScore[rank]
                         })
                         rank++
-                        let returnRounds = await RoomLog.countDocuments({
-                            uid: roomLog.uid, cId: cid, type: competeInfo['currentType']
-                        })
                         //通知客户端进行下一轮匹配
                         const msg = {
                             'event': 'matchMewRoom', 'message': {
-                                rounds: returnRounds + 2
+                                rounds: Math.random()
                             }
                         }
-                        global.ws.send(roomId.toString(), JSON.stringify(msg), roomLog.uid)
+                        //global.ws.send(roomId.toString(), JSON.stringify(msg), roomLog.uid)
+                        global.redisClientPub.publish('newInfo', JSON.stringify({
+                                roomId:roomId.toString(), msg:msg, uid: roomLog.uid
+                            }
+                        ))
                     }
+                    await util.setRoomUserStatus(roomId)
 
 
                     ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
@@ -889,18 +899,20 @@ router.post('/timeOutAnswer', async(ctx) => {
             await Match.findOneAndUpdate({_id: roomId}, {state: 3}).then(async(matchInfo) => {
                 const $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId]}})
                 for(const userInfo of $allUsers) {
-                    const returnRounds = await RoomLog.countDocuments({
-                        uid: userInfo.userId, cId: cid, type: competeInfo['currentType']
-                    })
                     //通知客户端进行下一轮匹配
                     const msg = {
                         'event': 'matchMewRoom', 'message': {
-                            rounds: returnRounds + 2
+                            rounds: Math.random()
                         }
                     }
-                    global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
+                    //global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
+                    global.redisClientPub.publish('newInfo', JSON.stringify({
+                            roomId:roomId.toString(), msg:msg, uid:  userInfo.userId
+                        }
+                    ))
                     ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
                 }
+                await util.setRoomUserStatus(roomId)
             })
             break;
         case 'final':
@@ -1059,7 +1071,6 @@ router.post('/timeOutAnswer', async(ctx) => {
                             const answerLogs = await AnswerLog.findOne({
                                 penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds, uid
                             })
-                            console.log('场景题')
                             // 判断当前用户有没有答题，答题且分数大于0，挑战成功
                             if(answerLogs && answerLogs.postAnswer > 0 && rank === finalUser * 0.1 + 1) {
                                 //挑战成功，进入下一轮
@@ -1213,7 +1224,11 @@ async function pushFinalPen(cid) {
 
                 }
             }
-            global.ws.send('', JSON.stringify(msg), finaUser.userId)
+            //global.ws.send('', JSON.stringify(msg), finaUser.userId)
+            global.redisClientPub.publish('newInfo', JSON.stringify({
+                    roomId:'', msg:msg, uid:  finaUser.userId
+                }
+            ))
         }
     }
     //向所有用户推送信息

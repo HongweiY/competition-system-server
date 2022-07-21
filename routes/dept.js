@@ -7,7 +7,6 @@ router.get('/list', async (ctx) => {
     const { deptName } = ctx.request.query
     const params = {}
     if (deptName) {
-        console.log('deptName')
         params.deptName = {
             $regex: deptName, $options: 'i'
         }

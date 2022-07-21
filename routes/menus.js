@@ -51,7 +51,6 @@ router.post('/create', async (ctx) => {
             res = await menuSchema.create(params)
             msg = '添加成功'
         }
-        console.log(res)
         if (res) {
             ctx.body = util.success({}, msg)
         } else {
@@ -68,7 +67,6 @@ router.post('/del', async (ctx) => {
         const res = await menuSchema.findByIdAndRemove(_id)
         const may = await menuSchema.deleteMany({ parentId: { $all: [_id] } })
 
-        console.log('may' + may)
         if (res) {
             ctx.body = util.success('', '删除成功')
         } else {

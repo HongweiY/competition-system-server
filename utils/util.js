@@ -156,7 +156,12 @@ async function canGoFinal(userId, cid) {
                     'event': 'finalUser',
                     'message': finalUserInfos
                 }
-                global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
+                //global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
+                global.redisClientPub.publish('newInfo', JSON.stringify({
+                        roomId: '', msg: msg, uid: finalUserInfo.userId
+                    }
+                ))
+                finaUser.userId
             }
             return {
                 allNumber: finalPenLogCount + 1,
@@ -180,7 +185,11 @@ async function canGoFinal(userId, cid) {
                         'event': 'finalUser',
                         'message': finalUserInfos
                     }
-                    global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
+                    //global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
+                    global.redisClientPub.publish('newInfo', JSON.stringify({
+                            roomId: '', msg: msg, uid: finalUserInfo.userId
+                        }
+                    ))
                 }
                 return {
                     allNumber: 1,
@@ -206,7 +215,11 @@ async function canGoFinal(userId, cid) {
                         'event': 'finalUser',
                         'message': finalUserInfos
                     }
-                    global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
+                    //global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
+                    global.redisClientPub.publish('newInfo', JSON.stringify({
+                            roomId: '', msg: msg, uid: finalUserInfo.userId
+                        }
+                    ))
                 }
                 return {
                     allNumber: 1,
@@ -301,57 +314,80 @@ async function pushFinalInfo(round, cid) {
             'event': 'pushFinalMessage',
             'message': message
         }
-        global.ws.send('', JSON.stringify(msg), finaUser.userId)
+        //global.ws.send('', JSON.stringify(msg), finaUser.userId)
+        global.redisClientPub.publish('newInfo', JSON.stringify({
+                roomId: '', msg: msg, uid: finaUser.userId
+            }
+        ))
     }
 }
 
 //推送题目
 async function pushPen(roomId, cid, type = 'end', uid = 'all') {
     //排除当前已经回答过的题目
-    const answerLogs = await AnswerLog.find({roomId, cid})
-    let penIds = []
-    for(const answerLog of answerLogs) {
-        const penId = answerLog.penId
-        if(!penIds.includes(penId)) {
-            penIds.push(penId)
-        }
-    }
+    //如果是end，直接查询题目推动
+    let matchInfo = await Match.findOne({_id: roomId})
+    let countDown = 25
     let penInfo
-    let params = {}
-    params.penType = {$in: ['判断', '多选', '单选',]}
-    // params.penType = {$in: ['场景题']}
-    if(penIds.length > 0) {
-        do {
-            penInfo = await Pen.aggregate().match(params).sample(1)
-        } while(penIds.includes(penInfo[0].penId));
-    } else {
-        penInfo = await Pen.aggregate().match(params).sample(1)
-    }
-    //查询当前所在题目
-    const matchInfo = await Match.findOne({_id: roomId})
-    let penRoundsNumber = matchInfo['currentRound']
-
     //总题目数量
     let allNum = 1
     const competeInfo = await Compete.findOne({cId: cid})
     if(competeInfo['currentType'] === 'must') {
         allNum = 5
     }
+    let penRoundsNumber = matchInfo['currentRound']
 
-    //更新题目推送时间和倒计时。
-    let countDown = 25
     if(type === 'end') {
         countDown = countDown - (dayjs().unix() - dayjs(matchInfo['pushTime']).unix())
         penInfo = matchInfo['pushPen']
+        const returnRounds = await RoomLog.countDocuments({uid: uid, cId: cid, type: competeInfo['currentType']})
+        const msg = {
+            'event': 'pushPen',
+            'message': {
+                rounds: returnRounds + 1,
+                penRoundsNumber,  // 当前所在题目
+                allNum,
+                countDown, //'剩余倒计时'
+                'penId': penInfo[0].penId,
+                'penType': penInfo[0].penType,
+                'stem': penInfo[0].stem,
+                'options': penInfo[0].options,
+                'src': penInfo[0].src,
+                'author': penInfo[0].author
+            }
+        }
+        global.redisClientPub.publish('newInfo', JSON.stringify({
+                roomId: '', msg: msg, uid: uid
+            }
+        ))
+
     } else {
+        //推动新题目
+        const answerLogs = await AnswerLog.find({roomId, cid})
+        let penIds = []
+        for(const answerLog of answerLogs) {
+            const penId = answerLog.penId
+            if(!penIds.includes(penId)) {
+                penIds.push(penId)
+            }
+        }
+
+        let params = {}
+        params.penType = {$in: ['判断', '多选', '单选',]}
+        // params.penType = {$in: ['场景题']}
+        if(penIds.length > 0) {
+            do {
+                penInfo = await Pen.aggregate().match(params).sample(1)
+            } while(penIds.includes(penInfo[0].penId));
+        } else {
+            penInfo = await Pen.aggregate().match(params).sample(1)
+        }
+
+        //更新题目推送时间和倒计时。
         await Match.updateOne({_id: roomId, cid}, {
             'pushTime': dayjs().format('YYYY-MM-DD HH:mm:ss'), 'pushPen': penInfo[0]
         })
-        //
-    }
 
-    //判断给所有人 还是单人推送题目
-    if(uid === 'all') {
         //给所有人推送题目，默认
         let $allUsers
         if(competeInfo['currentType'] === 'must') {
@@ -365,7 +401,8 @@ async function pushPen(roomId, cid, type = 'end', uid = 'all') {
                 uid: userInfo.userId, cId: cid, type: competeInfo['currentType'], roomId: {$ne: roomId}
             })
             const msg = {
-                'event': 'pushPen', 'message': {
+                'event': 'pushPen',
+                'message': {
                     uid: userInfo.userId,
                     rounds: returnRounds + 1,
                     penRoundsNumber,  // 当前所在题目
@@ -375,109 +412,200 @@ async function pushPen(roomId, cid, type = 'end', uid = 'all') {
                     'penType': penInfo[0].penType,
                     'stem': penInfo[0].stem,
                     'options': penInfo[0].options,
-                    'src': penInfo[0].src
+                    'src': penInfo[0].src,
+                    'author': penInfo[0].author
 
                 }
             }
-            global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
+            // global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
+
+            global.redisClientPub.publish('newInfo', JSON.stringify({
+                    roomId: roomId.toString(), msg: msg, uid: userInfo.userId
+                }
+            ))
         }
-    } else {
-        const returnRounds = await RoomLog.countDocuments({uid: uid, cId: cid, type: competeInfo['currentType']})
-        const msg = {
-            'event': 'pushPen', 'message': {
-                rounds: returnRounds + 1,
-                penRoundsNumber,  // 当前所在题目
-                allNum,
-                countDown, //'剩余倒计时'
-                'penId': penInfo[0].penId,
-                'penType': penInfo[0].penType,
-                'stem': penInfo[0].stem,
-                'options': penInfo[0].options,
-                'src': penInfo[0].src
-            }
-        }
-        global.ws.send(roomId.toString(), JSON.stringify(msg), uid)
+
     }
+}
+
+/**
+ * 开启新比赛后，重新设置用户状态
+ * @param roomId
+ * @returns {Promise<void>}
+ */
+async function setRoomUserStatus(roomId) {
+    const matchUserInfo = await Match.findById(roomId).exec()
+    //查询用户是否离开
+    if(global.redisClient.get(matchUserInfo['userOneId'])) {
+        await global.redisClient.get(matchUserInfo['userOneId']) === 'leave' ? "" : await global.redisClient.set(matchUserInfo['userOneId'], "ready")
+
+    }
+    if(global.redisClient.get(matchUserInfo['userOneId'])) {
+        await global.redisClient.get(matchUserInfo['userTwoId']) === 'leave' ? "" : await global.redisClient.set(matchUserInfo['userTwoId'], "ready")
+
+    }
+    if(global.redisClient.get(matchUserInfo['userOneId'])) {
+        await global.redisClient.get(matchUserInfo['userThreeId']) === 'leave' ? "" : await global.redisClient.set(matchUserInfo['userThreeId'], "ready")
+
+    }
+    if(global.redisClient.get(matchUserInfo['userOneId'])) {
+        await global.redisClient.get(matchUserInfo['userFourId']) === 'leave' ? "" : await global.redisClient.set(matchUserInfo['userFourId'], "ready")
+
+    }
+}
+
+async function exercise(params) {
+
+    const {cid, type, userId} = params
+    const userInfo = await User.findById(userId).exec()
+    //查询正在匹配的房间
+    //状态state 1 匹配中 2 正在比赛 3当前房间答题已结束
+    //type: 匹配类型 must  disuse
+    let matchInfo = await Match.findOneAndUpdate({$and: [{cid}, {type}, {state: {$in: [1]}}]}, {state: 4})
+    //更具房间人数添加人员
+    if(matchInfo){
+        const _id = matchInfo._id
+        switch(type) {
+            case 'must':
+                await Match.updateOne({_id: _id}, {
+                    userFourId: userId,
+                    userCount: 4,
+                    state: 2
+                })
+               break
+            case 'disuse':
+                await Match.updateOne({_id: _id}, {userTwoId: userId, userCount: 2, state: 2})
+               break
+        }
+        const msg = {
+            'event': 'matchingSuccess',
+            'message': _id
+        }
+        global.redisClientPub.publish('newInfo', JSON.stringify({
+                roomId: '', msg: msg, uid: userInfo.userId
+            }
+        ))
+        // return _id
+    }
+
+
+    return false
+
+
 }
 
 //开始匹配
 async function startMatch(params) {
-
     const {cid, type, userId} = params
-    // 判断是否有空白房间
-    let isExitMatch = await Match.findOne({
-        $and: [{cid}, {type}, {state: {$in: [1, 2]}}, {$or: [{userOneId: userId}, {userTwoId: userId}, {userThreeId: userId}, {userFourId: userId}]}]
-    })
+    if(!userId) {
+        return false
+    }
+    //cid =1 和cid=2时，走新的逻辑
+    if(cid == 1 || cid == 2) {
+        //演练信息
+        return await exercise(params)
+    }
 
+    // 判断用户是否已经在房间中
+    let isExitMatch = await Match.findOne({
+        $and: [{cid}, {type}, {state: 2}, {$or: [{userOneId: userId}, {userTwoId: userId}, {userThreeId: userId}, {userFourId: userId}]}]
+    })
     const MaxUserCount = {
         'must': 4, 'disuse': 2, 'final': 2,
     }
 
     //用户在房间里面。直接返回
     if(isExitMatch) {
-        if(isExitMatch['userCount'] === MaxUserCount[type]) {
-            const userInfo = await User.findById(userId).exec()
-            console.log('开始推送题目')
-            await pushPen(isExitMatch._id, cid, 'end', userInfo.userId)
-            return isExitMatch._id
-        } else {
-            return isExitMatch._id
-        }
+        const userInfo = await User.findById(userId).exec()
+        await pushPen(isExitMatch._id, cid, 'end', userInfo.userId)
+        return isExitMatch._id
 
     } else {
-        //查询正在匹配的房间
-        //状态state 1 匹配中 2 正在比赛 3当前房间答题已结束
-        //type: 匹配类型 must  disuse
-        let matchInfo = await Match.findOneAndUpdate({$and: [{cid}, {type}, {state: {$in: [1]}}]}, {state: 3})
-        if(!matchInfo) {
-            //没有，创建一个房间
-            const counterDoc = await Counter.findOneAndUpdate({_id: 'matchId'}, {$inc: {sequenceValue: 1}}, {new: true})
-            const res = await Match.create({
-                mId: counterDoc.sequenceValue,
-                cid,//竞赛id
-                type,//匹配类型 must  disuse
-                userCount: 1,//当前房间人数
-                userOneId: userId, state: 1, currentRound: 1,
-            })
-            if(res) {
-                return res._id
-            } else {
-                return false
-            }
-        } else {
-            //更具房间人数添加人员
-            const _id = matchInfo._id
-            switch(type) {
-                case 'must':
-                    switch(matchInfo.userCount) {
-                        case 1:
-                            await Match.updateOne({_id: _id}, {userTwoId: userId, userCount: 2, state: 1})
-                            break;
-                        case 2:
-                            await Match.updateOne({_id: _id}, {userThreeId: userId, userCount: 3, state: 1})
-                            break;
-                        case 3:
-                            await Match.updateOne({_id: _id}, {
-                                userFourId: userId,
-                                userCount: 4,
-                                state: 2
-                            })
-                            console.log('这里也执行了')
-                            await pushPen(_id, cid, 'start', 'all')
-                            break;
+        //将用户写入redis集合
+        const userStatus = await global.redisClient.get(userId)
+
+        if(!userStatus) {
+            await global.redisClient.set(userId, "ready");
+        }
+        if(userStatus === 'ready' || !userStatus) {
+            let MatchUsers
+            await global.redisClient.sadd('match-user', userId);
+            await global.redisClient.set(userId, 'matching')
+            //修改redis状态
+            //判断长度
+            const userNum = await global.redisClient.scard('match-user')
+            if(userNum >= MaxUserCount[type]) {
+                MatchUsers = await global.redisClient.spop('match-user', MaxUserCount[type]);
+                if(MatchUsers.length < MaxUserCount[type]) {
+                    for(let i = 0; i < MaxUserCount[type]; i++) {
+                        if(MatchUsers[i]) {
+                            await global.redisClient.sadd('match-user', MatchUsers[i])
+                            await global.redisClient.set(MatchUsers[i], 'ready')
+                        }
                     }
-                    return matchInfo._id
-                    break;
-                case 'disuse':
-                    matchInfo = await Match.updateOne({_id: _id}, {userTwoId: userId, userCount: 2, state: 2})
-                    await pushPen(_id, cid, 'start', 'all')
-                    return _id
-                    break;
-                case 'final':
-                    break;
+                    return false
+                } else {
+                    for(let i = 0; i < MaxUserCount[type]; i++) {
+                        if(MatchUsers[i]) {
+                            await global.redisClient.set(MatchUsers[i], 'gaming')
+                        }
+                    }
+                }
+
+                const counterDoc = await Counter.findOneAndUpdate({_id: 'matchId'}, {$inc: {sequenceValue: 1}}, {new: true})
+                let res
+                if(type === 'must') {
+                    if(MatchUsers) {
+                        res = await Match.create({
+                            mId: counterDoc.sequenceValue,
+                            cid,//竞赛id
+                            type,//匹配类型 must  disuse
+                            userCount: 4,//当前房间人数
+                            userOneId: MatchUsers[0],
+                            userTwoId: MatchUsers[1],
+                            userThreeId: MatchUsers[2],
+                            userFourId: MatchUsers[3],
+                            state: 2,
+                            currentRound: 1,
+                        })
+                    }
+
+                } else {
+                    if(MatchUsers) {
+                        res = await Match.create({
+                            mId: counterDoc.sequenceValue,
+                            cid,//竞赛id
+                            type,//匹配类型 must  disuse
+                            userCount: 2,//当前房间人数
+                            userOneId: MatchUsers[0],
+                            userTwoId: MatchUsers[1],
+                            state: 2,
+                            currentRound: 1,
+                        })
+                    }
+                }
+
+                const msg = {
+                    'event': 'matchingSuccess',
+                    'message': res._id
+                }
+                for(const MatchUser of MatchUsers) {
+                    const userInfo = await User.findById(MatchUser).exec()
+                    global.redisClientPub.publish('newInfo', JSON.stringify({
+                            roomId: '', msg: msg, uid: userInfo.userId
+                        }
+                    ))
+                }
+
             }
+            //将用户数据写入房间返回房间号
+            //判断长度
+            //没有，创建一个房间
+
         }
     }
+
+    return true
 
 }
 
@@ -517,7 +645,11 @@ async function matchUserInfo(roomID) {
     //查询用户的成绩
 
     Score.findOne()
-    global.ws.send(roomID.toString(), JSON.stringify(msg))
+    //global.ws.send(roomID.toString(), JSON.stringify(msg))
+    global.redisClientPub.publish('newInfo', JSON.stringify({
+            roomId: roomID.toString(), msg: msg, uid: ''
+        }
+    ))
 }
 
 
@@ -540,16 +672,14 @@ async function answerInfo(roomID, rounds) {
                 template.useTime = roomLog['useTime']
                 //如果当前是淘汰赛则不传递积分
                 const competitionInfo = await Compete.findOne({cId: matchUserInfo.cid})
-                console.log(competitionInfo)
                 if(competitionInfo['currentType'] === 'must') {
                     template.score = roomLog['rightNumber']
                 } else {
 
                     const scoreInfo = await Score.findOne({userId: userInfo._id, competeId: matchUserInfo.cid})
-                    console.log({uid: userInfo['userId'], competeId: matchUserInfo.cid})
-                    console.log(scoreInfo)
                     if(scoreInfo) {
                         template.score = scoreInfo['score']
+                        template.useTime = scoreInfo['answer_time']
                     } else {
                         template.score = 0
                     }
@@ -576,10 +706,15 @@ async function answerInfo(roomID, rounds) {
     const msg = {
         'event': 'pushAnswerInfo', 'message': returnData
     }
-    global.ws.send(roomID.toString(), JSON.stringify(msg), 'all')
+    //global.ws.send(roomID.toString(), JSON.stringify(msg), 'all')
+    global.redisClientPub.publish('newInfo', JSON.stringify({
+            roomId: roomID.toString(), msg: msg, uid: 'all'
+        }
+    ))
 
 
 }
+
 
 async function noteRoomLog(params) {
     const {uid, roomId, rounds, cId, isRight, useTime, type} = params
@@ -711,7 +846,11 @@ async function pushCurrentFinalInfo(cid, rounds, penRoundsNumber) {
                 showMessage
             }
         }
-        global.ws.send('', JSON.stringify(msg), finaUser.userId)
+        //global.ws.send('', JSON.stringify(msg), finaUser.userId)
+        global.redisClientPub.publish('newInfo', JSON.stringify({
+                roomId: '', msg: msg, uid: finaUser.userId
+            }
+        ))
     }
 }
 
@@ -743,6 +882,24 @@ const encrypt = (data) => {
     cryptContent = Buffer.from(cryptContent, 'binary').toString('base64');
     return cryptContent;
 };
+
+/**
+ * 获取ip
+ * @returns {string}
+ */
+function getIPAddress() {
+    const interfaces = require('os').networkInterfaces();
+    for(const devName in interfaces) {
+        const iFace = interfaces[devName];
+        for(let i = 0; i < iFace.length; i++) {
+            const alias = iFace[i];
+            if(alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
+                return alias.address;
+            }
+        }
+    }
+}
+
 
 module.exports = {
     /**
@@ -802,5 +959,7 @@ module.exports = {
     answerInfo,
     canGoFinal,
     pushFinalInfo,
-    pushCurrentFinalInfo
+    pushCurrentFinalInfo,
+    getIPAddress,
+    setRoomUserStatus
 }

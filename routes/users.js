@@ -15,7 +15,6 @@ router.prefix('/users')
 router.post('/login', async(ctx) => {
     try {
         const {username, userPwd} = ctx.request.body
-        console.log(username, md5(userPwd))
         const res = await User.findOne({
             username, userPwd: md5(userPwd)
         }, 'userId username role')
@@ -156,7 +155,6 @@ async function getMenuList(role, roleKeys) {
     } else {
         // 根据权限获取菜单
         const roleList = await Role.find({_id: {$in: roleKeys}}) || []
-        console.log('roleList====' + roleList)
         let menuIds = []
         // eslint-disable-next-line array-callback-return
         roleList.map(role => {

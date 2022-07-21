@@ -2,7 +2,7 @@ const Koa = require('koa')
 const app = new Koa()
 const views = require('koa-views')
 const json = require('koa-json')
-const koaBody=require('koa-body')
+const koaBody = require('koa-body')
 const onerror = require('koa-onerror')
 // const bodyparser = require('koa-bodyparser')
 const logger = require('koa-logger')
@@ -18,14 +18,27 @@ const score = require('./routes/score')
 const competes = require('./routes/competes')
 const pens = require('./routes/pens')
 const WebSocketServer = require('./wss/websocket')
-/**
- * Create Socket server.
- */
+const debug = require('debug')('demo:server');
+const http = require('http');
 
-const ws = new WebSocketServer()
+const port = normalizePort(process.env.PORT || '9000');
 
-ws.init()
-global.ws = ws
+function normalizePort(val) {
+    const port = parseInt(val, 10);
+
+    if(isNaN(port)) {
+        // named pipe
+        return val;
+    }
+
+    if(port >= 0) {
+        // port number
+        return port;
+    }
+
+    return false;
+}
+
 
 // error handler
 onerror(app)
@@ -47,7 +60,7 @@ app.use(views(path.join(__dirname, '/views'), {
 app.use(koaBody({
     multipart: true,
     formidable: {
-        maxFileSize: 400*1024*1024,	// 设置上传文件大小最大限制，默认2M
+        maxFileSize: 400 * 1024 * 1024,	// 设置上传文件大小最大限制，默认2M
         uploadDir: 'public/uploads/',
         keepExtensions: true, // 保持文件的后缀
     }
@@ -71,8 +84,9 @@ app.use(koaJwt({secret: 'ymfsder'}).unless(
             /^\/api\/users\/login/,
             /^\/api\/compete\/create/,
             /^\/api\/compete\/userAdd/,
-            /^\/api\/compete\/delete/ ,
-            /^\/api\/compete\/show/
+            /^\/api\/compete\/delete/,
+            /^\/api\/compete\/show/,
+            /^\/api\/compete\/test/
         ]
     }
 ))
@@ -96,4 +110,70 @@ app.on('error', (err, ctx) => {
     console.error('server error', err, ctx)
 })
 
-module.exports = app
+const server = http.createServer(app.callback());
+
+server.listen(port)
+
+/**
+ * Create Socket server.
+ */
+
+const ws = new WebSocketServer()
+ws.init(server)
+global.ws = ws
+
+const Redis = require('ioredis');
+
+// redis消息分发
+// const redisClientPub = new Redis({
+//     port: 6379, // Redis port
+//     host: "10.206.0.17", // Redis host
+//     username: "bmj", // needs Redis >= 6
+//     password: "bmj123456redis",
+//     db: 0, // Defaults to 0
+// });
+// const redisClientSub = new Redis({
+//     port: 6379, // Redis port
+//     host: "10.206.0.17", // Redis host
+//     username: "default", // needs Redis >= 6
+//     password: "Bmj@12345@redis",
+//     db: 0, // Defaults to 0
+// });
+//
+// const redisClient = new Redis({
+//     port: 6379, // Redis port
+//     host: "10.206.0.17", // Redis host
+//     username: "default", // needs Redis >= 6
+//     password: "Bmj@12345@redis",
+//     db: 0, // Defaults to 0
+// });
+
+const redisClientPub = new Redis({
+    port: 6379, // Redis port
+    host: "127.0.0.1", // Redis host
+    db: 0, // Defaults to 0
+});
+const redisClientSub = new Redis({
+    port: 6379, // Redis port
+    host: "127.0.0.1", // Redis host
+    db: 0, // Defaults to 0
+});
+const redisClient = new Redis({
+    port: 6379, // Redis port
+    host: "127.0.0.1", // Redis host
+    db: 0, // Defaults to 0
+});
+
+redisClientSub.subscribe('newInfo')
+
+redisClientSub.on("message", function(channel, message) {
+    //往对应房间广播消息
+    const {roomId, msg, uid} = JSON.parse(message)
+    global.ws.send(roomId, JSON.stringify(msg), uid)
+
+
+});
+
+
+global.redisClientPub = redisClientPub
+global.redisClient = redisClient

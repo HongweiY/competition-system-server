@@ -2,22 +2,36 @@
 <project version="4">
   <component name="WebServers">
     <option name="servers">
-      <webServer id="a659f753-45b8-4e4d-808f-4f67f2596a72" name="118.25.45.41">
-        <fileTransfer rootFolder="/www/wwwroot/bmj-online-serve" accessType="SFTP" host="118.25.45.41" port="22" sshConfigId="7ca81da1-4a04-40b0-850d-cb8ff01fe489" sshConfig="root@118.25.45.41:22 password">
+      <webServer id="1f2e5c4d-f892-4d58-97ef-2b992d518fbe" name="bmj-new">
+        <fileTransfer rootFolder="/www/wwwroot/api" accessType="SFTP" host="118.195.244.233" port="22" sshConfigId="def9fe23-bd21-462e-a32c-d5be63c165ab" sshConfig="root@118.195.244.233:22 password">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
           </advancedOptions>
         </fileTransfer>
       </webServer>
-      <webServer id="eb174f1a-6135-4af6-8e86-1b74589b771c" name="139.224.13.0">
-        <fileTransfer rootFolder="/www/wwwroot/bmj-server" accessType="SFTP" host="139.224.13.0" port="22" sshConfigId="e2ea50a4-e310-4e8c-8500-72a71b0475ab" sshConfig="root@139.224.13.0:22 password">
+      <webServer id="d81de74e-7a6e-41d8-bb70-65d2b33d51de" name="bmj_clb_pc_1">
+        <fileTransfer rootFolder="/www/wwwroot/api" accessType="SFTP" host="118.195.236.100" port="22" sshConfigId="de268290-f337-4ffa-b492-b5e904794169" sshConfig="root@118.195.236.100:22">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
           </advancedOptions>
         </fileTransfer>
       </webServer>
-      <webServer id="e77b3c6e-7e6c-4bd1-a03e-3ffcdcc6c427" name="bmj">
-        <fileTransfer rootFolder="/www/wwwroot/api" accessType="SFTP" host="1.116.248.226" port="22" sshConfigId="264307d1-101b-428a-9d08-408c31edec41" sshConfig="root@1.116.248.226:22 password">
+      <webServer id="efdaaf87-aa0d-480b-8094-c19f7cf2ad0a" name="bmj_clb_pc_2">
+        <fileTransfer rootFolder="/www/wwwroot/api" accessType="SFTP" host="118.195.255.61" port="22" sshConfigId="6c73b9f3-2058-4fba-904c-e10c09408354" sshConfig="root@118.195.255.61:22">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="dfba6e70-f131-40fa-bfc0-1cf4c9830a80" name="bmj_clb_h5_1">
+        <fileTransfer rootFolder="/www/wwwroot/api" accessType="SFTP" host="118.195.242.190" port="22" sshConfigId="9dd815aa-4b0c-4b85-b278-8b88fc63d8ab" sshConfig="root@118.195.242.190:22">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="97273bed-27fe-44e5-a2c1-8a06401f7d07" name="bmj_clb_h5_2">
+        <fileTransfer rootFolder="/www/wwwroot/api" accessType="SFTP" host="118.195.252.59" port="22" sshConfigId="85c11947-dafe-4433-bf1e-d6394437a03e" sshConfig="root@118.195.252.59:22">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
           </advancedOptions>
