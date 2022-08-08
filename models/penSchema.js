@@ -20,6 +20,7 @@ const penSchema = new Schema({
     },
     answer: String,
     options: Array,
+    author:String,
     createTime: {
         type: Date, default: Date.now()
     }

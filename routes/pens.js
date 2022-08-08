@@ -62,11 +62,15 @@ router.post('/import', async(ctx) => {
                 isRandom: data['是否随机'] == '是' ? true : false,
                 answer: answer,
                 options: option,
+                author: data['出题者单位'] ? `${data['出题者单位']}-${data['出题者姓名']}` : ''
+
             })
             penId++
 
         }
+
         const res = await Pen.create(insertData)
+        await Counter.updateOne({_id: 'penId'}, {sequenceValue: penId})
         if(res) {
             ctx.body = util.success({}, `成功导入${insertData.length}成功数据`)
         } else {

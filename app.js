@@ -86,7 +86,9 @@ app.use(koaJwt({secret: 'ymfsder'}).unless(
             /^\/api\/compete\/userAdd/,
             /^\/api\/compete\/delete/,
             /^\/api\/compete\/show/,
-            /^\/api\/compete\/test/
+            /^\/api\/compete\/test/,
+            /^\/api\/compete\/canInter/,
+            /^\/api\/compete\/pushFinalPen/,
         ]
     }
 ))
@@ -125,51 +127,51 @@ global.ws = ws
 const Redis = require('ioredis');
 
 // redis消息分发
-// const redisClientPub = new Redis({
-//     port: 6379, // Redis port
-//     host: "10.206.0.17", // Redis host
-//     username: "bmj", // needs Redis >= 6
-//     password: "bmj123456redis",
-//     db: 0, // Defaults to 0
-// });
-// const redisClientSub = new Redis({
-//     port: 6379, // Redis port
-//     host: "10.206.0.17", // Redis host
-//     username: "default", // needs Redis >= 6
-//     password: "Bmj@12345@redis",
-//     db: 0, // Defaults to 0
-// });
-//
-// const redisClient = new Redis({
-//     port: 6379, // Redis port
-//     host: "10.206.0.17", // Redis host
-//     username: "default", // needs Redis >= 6
-//     password: "Bmj@12345@redis",
-//     db: 0, // Defaults to 0
-// });
-
 const redisClientPub = new Redis({
     port: 6379, // Redis port
-    host: "127.0.0.1", // Redis host
+    host: "10.206.0.17", // Redis host
+    username: "bmj", // needs Redis >= 6
+    password: "bmj123456redis",
     db: 0, // Defaults to 0
 });
 const redisClientSub = new Redis({
     port: 6379, // Redis port
-    host: "127.0.0.1", // Redis host
+    host: "10.206.0.17", // Redis host
+    username: "default", // needs Redis >= 6
+    password: "Bmj@12345@redis",
     db: 0, // Defaults to 0
 });
+
 const redisClient = new Redis({
     port: 6379, // Redis port
-    host: "127.0.0.1", // Redis host
+    host: "10.206.0.17", // Redis host
+    username: "default", // needs Redis >= 6
+    password: "Bmj@12345@redis",
     db: 0, // Defaults to 0
 });
+
+// const redisClientPub = new Redis({
+//     port: 6379, // Redis port
+//     host: "127.0.0.1", // Redis host
+//     db: 0, // Defaults to 0
+// });
+// const redisClientSub = new Redis({
+//     port: 6379, // Redis port
+//     host: "127.0.0.1", // Redis host
+//     db: 0, // Defaults to 0
+// });
+// const redisClient = new Redis({
+//     port: 6379, // Redis port
+//     host: "127.0.0.1", // Redis host
+//     db: 0, // Defaults to 0
+// });
 
 redisClientSub.subscribe('newInfo')
 
 redisClientSub.on("message", function(channel, message) {
     //往对应房间广播消息
-    const {roomId, msg, uid} = JSON.parse(message)
-    global.ws.send(roomId, JSON.stringify(msg), uid)
+    const {roomId, msg, uid, cId} = JSON.parse(message)
+    global.ws.send(roomId, JSON.stringify(msg), uid, cId)
 
 
 });

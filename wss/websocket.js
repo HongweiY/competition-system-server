@@ -10,6 +10,8 @@ const Pen = require("../models/penSchema");
 const RoomLog = require("../models/roomLogSchema");
 const dayjs = require("dayjs");
 const util = require("../utils/util");
+const mongoose = require("mongoose");
+const Schedule = require("../utils/schedule");
 
 class ws {
     constructor(config = {}) {
@@ -147,16 +149,17 @@ class ws {
                 // if(matchUserInfo['type'] === 'disuse' && matchUserInfo['userCount'] === 2) {
                 //     await pushPen(roomId, matchUserInfo['cid'], 'end', msgObj.userId)
                 // }
+
                 if(msgObj.type === 'start') {
                     await pushPen(roomId, matchUserInfo['cid'], 'start', 'all')
                     global.redisClientPub.publish('newInfo', JSON.stringify({
-                            roomId, msg, uid: 'all'
+                            roomId, msg, uid: 'all', cId: matchUserInfo.cid
                         }
                     ))
                 } else {
                     await pushPen(roomId, matchUserInfo['cid'], 'end', msgObj.userId)
                     global.redisClientPub.publish('newInfo', JSON.stringify({
-                            roomId, msg, uid: msgObj.userId
+                            roomId, msg, uid: msgObj.userId, cId: matchUserInfo.cid
                         }
                     ))
                 }
@@ -167,7 +170,7 @@ class ws {
             changeCompeteType: async() => {
                 const cId = msgObj.message.cId
                 const currentType = msgObj.message.currentType
-
+                const userId = msgObj.message.userId
                 //查询状态是否已经改变
                 const competeInfo = await Compete.findOne({cId, currentType}).exec()
                 if(!competeInfo) {
@@ -202,65 +205,207 @@ class ws {
                                 penNumber: 1,//第几题,
                                 pushTime: dayjs().format('YYYY-MM-DD HH:mm:ss')
                             })
-                            if(allFinalUser) {
-                                let rank = 1
-                                for(const finalUser of allFinalUser) {
-                                    const isExit = await FinalUser.findOne({
-                                        userId: finalUser.userId.userId,
-                                        username: finalUser.userId.username,
-                                        city: finalUser.userId.city,
-                                        depart: finalUser.userId.depart,
-                                        phone: finalUser.userId.phone,
-                                        img: finalUser.userId.img,
-                                        cid: cId,//竞赛id
-                                        rank: rank,//排名
-                                    })
-                                    if(!isExit) {
-                                        await FinalUser.create({
-                                            userId: finalUser.userId.userId,
-                                            username: finalUser.userId.username,
-                                            city: finalUser.userId.city,
-                                            depart: finalUser.userId.depart,
-                                            phone: finalUser.userId.phone,
-                                            img: finalUser.userId.img,
-                                            cid: cId,//竞赛id
-                                            rank: rank,//排名
-                                        })
-                                        rank++
-                                        newCompeteInfo.currentType = currentType
-                                        //向所有资格的用户发送消息
-                                        this.wss.clients.forEach((client) => {
-                                            if(client.readyState === WebSocket.OPEN && client.userId === finalUser.userId.userId) {
-                                                client.send(JSON.stringify({
-                                                    event: 'finalCompetition', newCompeteInfo, finalInfo: {
-                                                        finalRound: 1,//开始第一轮，
-                                                        showMessage: `恭喜你以第${rank}名进入终极排位赛。期间请不要离开，随时等待题目推送`,
-                                                        rank,
-
-                                                    }
-                                                }))
-                                            }
-
-                                        })
-                                    }
-
-                                }
-                            }
                         }
+
+
+                        let rank = 1
+                        for(const finalUser of allFinalUser) {
+
+                            const isExit = await FinalUser.findOne({
+                                userId: finalUser.userId.userId,
+                                cid: cId,//竞赛id
+                            })
+                            if(!isExit) {
+                                await FinalUser.create({
+                                    userId: finalUser.userId.userId,
+                                    username: finalUser.userId.username,
+                                    city: finalUser.userId.city,
+                                    depart: finalUser.userId.depart,
+                                    phone: finalUser.userId.phone,
+                                    img: finalUser.userId.img,
+                                    cid: cId,//竞赛id
+                                    rank: rank,//排名
+                                })
+                                rank++
+                                newCompeteInfo.currentType = currentType
+
+                                const msg = {
+                                    'event': 'finalCompetition',
+                                    'message': {
+                                        newCompeteInfo,
+                                        finalInfo: {
+                                            finalRound: 1,//开始第一轮，
+                                            showMessage: `恭喜你以第${rank}名进入终极排位赛。期间请不要离开，随时等待题目推送`,
+                                            rank,
+                                        }
+                                    }
+                                }
+                                global.redisClientPub.publish('newInfo', JSON.stringify({
+                                        roomId: '', msg, uid: finalUser.userId.userId, cId
+                                    }
+                                ))
+                            }
+
+                        }
+                        const taskStartTime = dayjs().add(30, 'second')
+                        const second = taskStartTime.get('second')
+                        const minute = taskStartTime.get('minute')
+                        const hour = taskStartTime.get('hour')
+                        const date = taskStartTime.get('date')
+                        const month = taskStartTime.get('month')
+                        const schedule = new Schedule({
+                            unit_name: '自动题目切换',
+                            maintain_time: `${second} ${minute} ${hour} ${date} ${month + 1} *`, //2016年的1月1日1点1分30秒触发
+                            last_alarm: '自动题目切换'
+                        }).create(async() => {
+                           await util.pushFinalPen(cId)
+                        })
 
                     } else {
                         newCompeteInfo.currentType = currentType
-                        this.wss.clients.forEach((ws) => {
-                            ws.send(JSON.stringify({
-                                event: 'changeCompeteType', message: newCompeteInfo
-                            }))
-                        })
+                        const msg = {
+                            'event': 'changeCompeteType', 'message': newCompeteInfo
+                        }
+                        global.redisClientPub.publish('newInfo', JSON.stringify({
+                                roomId: '', msg, uid: 'all', cId
+                            }
+                        ))
                     }
-
-
+                } else {
+                    const msg = {
+                        'event': 'changeCompeteType', 'message': competeInfo
+                    }
+                    global.redisClientPub.publish('newInfo', JSON.stringify({
+                            roomId: '', msg, uid: userId, cId
+                        }
+                    ))
                 }
 
-            }, message: () => {
+            },
+            setUserState: async() => {
+                const {uId} = msgObj.message
+                await global.redisClient.set(uId, "ready");
+
+            },
+            getAllRank: async() => {
+
+                const {cId, userId, uid, page = 1, page_size = 20} = msgObj.message
+                //查询状态是否已经改变
+                const {myRank, currentRankInfo} = await util.userRank(cId, uid)
+                const skipIndex = (page - 1) * page_size
+
+                const competitionInfo = await Compete.findOne({cId: cId}).exec()
+                const currentType = competitionInfo['currentType']
+
+                let returnData = []
+                let total = 0
+                if(currentType === 'final') {
+                    let sort = {
+                        rank: 1,
+                    }
+                    let list = await FinalUser.find({cId}, {}, {
+                        skip: skipIndex, limit: page_size, sort: sort
+                    }).populate(['userId']).exec()
+                    total = competitionInfo['finalUser']
+
+                    if(list) {
+                        for(let i = 0; i < list.length; i++) {
+                            let finalUser = list[i]
+                            let username = finalUser.username
+                            if(username.length < 3) {
+                                username = username.substring(0, 1) + '*'
+                            } else {
+                                let mid = ''
+                                for(let j = 0; j < username.length - 2; j++) {
+                                    mid += '*'
+                                }
+                                username = username.substring(0, 1) + mid + username.substring(username.length - 1, username.length)
+                            }
+                            returnData.push({
+                                "username": username,
+                                "phone": finalUser.phone.substring(0, 3) + 'xxxx' + finalUser.phone.substring(7, 11),
+                                "rank": (page - 1) * page_size + i + 1,
+                                "answer_time": finalUser.answer_time,
+                                "answer_number": finalUser.answer_number,
+                                "accuracy": finalUser.accuracy_number > 0 ? (finalUser.accuracy_number * 100 / finalUser.answer_number_number).toFixed(2) + '%' : '0%',
+                                "score": finalUser.score,
+                                "img": finalUser.img,
+                                "action": finalUser.action
+                            })
+                        }
+                    }
+                } else {
+                    let sort = {
+                        score: -1,
+                        answer_time: 1,
+                        lastUpdateTime: 1
+                    }
+                    const list = await Score.find({competeId: cId}, {}, {
+                        skip: skipIndex, limit: page_size, sort: sort
+                    }).populate(['userId']).exec()
+                    total = await Score.countDocuments({competeId: cId})
+
+                    if(list) {
+                        for(let i = 0; i < list.length; i++) {
+                            let score = list[i]
+                            let username = score.userId.username
+                            if(username.length < 3) {
+                                username = username.substring(0, 1) + '*'
+                            } else {
+                                let mid = ''
+                                for(let j = 0; j < username.length - 2; j++) {
+                                    mid += '*'
+                                }
+                                username = username.substring(0, 1) + mid + username.substring(username.length - 1, username.length)
+                            }
+                            returnData.push({
+                                "username": username,
+                                "phone": score.userId.phone.substring(0, 3) + 'xxxx' + score.userId.phone.substring(7, 11),
+                                "rank": (page - 1) * page_size + i + 1,
+                                "answer_time": score.answer_time,
+                                "answer_number": score.answer_number,
+                                "accuracy": score.accuracy ? (score.accuracy * 100).toFixed(2) + '%' : '0%',
+                                "score": score.score,
+                                "img": score.userId.img
+                            })
+                        }
+                    }
+                }
+
+
+                const msg = {
+                    'event': 'userAllRank',
+                    'message': {
+                        list: returnData,
+                        total,
+                        currentRank: myRank,
+                        currentRankInfo
+                    }
+                }
+                global.redisClientPub.publish('newInfo', JSON.stringify({
+                        roomId: '', msg, uid: userId, cId
+                    }
+                ))
+            },
+
+            getUserRank: async() => {
+                const cId = msgObj.message.cId
+                const userId = msgObj.message.userId
+                const uid = msgObj.message.uid
+
+                const {myRank, currentRankInfo} = await util.userRank(cId, uid)
+
+                //查询状态是否已经改变
+                const msg = {
+                    'event': 'userRank', 'message': myRank
+                }
+                global.redisClientPub.publish('newInfo', JSON.stringify({
+                        roomId: '', msg, uid: userId, cId
+                    }
+                ))
+
+            },
+            message: () => {
 
                 // 鉴权拦截
                 // if (!ws.isAuth && this.isAuth) {
@@ -280,27 +425,35 @@ class ws {
 
     // 房间匹配答题，信息推送 题目推送
 
-    send(roomID, msg, uid = 'all') {
+    send(roomID, msg, uid = 'all', cId = '') {
         if(roomID) {
             if(uid === 'all') {
                 this.wss.clients.forEach((client) => {
-                    if(client.readyState === WebSocket.OPEN && client.roomId === roomID) {
+                    if(client.readyState === WebSocket.OPEN && client.roomId === roomID && client.cId === cId) {
                         client.send(msg)
                     }
                 })
             } else {
                 this.wss.clients.forEach((client) => {
-                    if(client.readyState === WebSocket.OPEN && client.userId === uid) {
+                    if(client.readyState === WebSocket.OPEN && client.userId === uid && client.cId === cId) {
                         client.send(msg)
                     }
                 })
             }
         } else {
-            this.wss.clients.forEach((client) => {
-                if(client.readyState === WebSocket.OPEN && client.userId === uid) {
-                    client.send(msg)
-                }
-            })
+            if(uid === 'all') {
+                this.wss.clients.forEach((client) => {
+                    if(client.readyState === WebSocket.OPEN && client.cId === cId) {
+                        client.send(msg)
+                    }
+                })
+            } else {
+                this.wss.clients.forEach((client) => {
+                    if(client.readyState === WebSocket.OPEN && client.userId === uid && client.cId === cId) {
+                        client.send(msg)
+                    }
+                })
+            }
         }
     }
 

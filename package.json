@@ -27,6 +27,7 @@
     "koa-static": "^5.0.0",
     "koa-views": "^6.2.0",
     "mongoose": "^6.2.4",
+    "node-schedule": "^2.1.0",
     "public-ip": "^6.0.1",
     "pug": "^2.0.3",
     "ws": "^7.4.1",

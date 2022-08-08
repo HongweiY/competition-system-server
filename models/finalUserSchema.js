@@ -13,6 +13,10 @@ const finalUserSchema = new Schema({
     img: String,
     cid: Number,//竞赛id
     rank: Number,//排名
+    action: {
+        type: String,
+        default: 'none'
+    },
     answer_time: {
         type: Number,
         default: 0

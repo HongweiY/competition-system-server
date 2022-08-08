@@ -17,6 +17,8 @@ const crypto = require('crypto');
 const dayjs = require("dayjs");
 const FinalUser = require("../models/finalUserSchema");
 const FinalPenLogSchema = require("../models/finalPenLogSchema");
+const mongoose = require("mongoose");
+const Schedule = require("./schedule");
 const CODE = {
     SUCCESS: 200, PARAM_ERROR: 10001, // 参数错误
     USER_ACCOUNT_ERROR: 20001, // 用户名密码错误
@@ -118,7 +120,7 @@ async function canGoFinal(userId, cid) {
                     rank,
                     accuracy,
                     // area: '1-15名'
-                    area: ` 0 -${finalUser * 0.1 + spacingCount}名`
+                    area: ` 1 -${finalUser * 0.1 + spacingCount}名`
                 }
             }
             break;
@@ -158,10 +160,10 @@ async function canGoFinal(userId, cid) {
                 }
                 //global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
                 global.redisClientPub.publish('newInfo', JSON.stringify({
-                        roomId: '', msg: msg, uid: finalUserInfo.userId
+                        roomId: '', msg: msg, uid: finalUserInfo.userId, cId: cid
                     }
                 ))
-                finaUser.userId
+                // finaUser.userId
             }
             return {
                 allNumber: finalPenLogCount + 1,
@@ -187,7 +189,7 @@ async function canGoFinal(userId, cid) {
                     }
                     //global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
                     global.redisClientPub.publish('newInfo', JSON.stringify({
-                            roomId: '', msg: msg, uid: finalUserInfo.userId
+                            roomId: '', msg: msg, uid: finalUserInfo.userId, cId: cid
                         }
                     ))
                 }
@@ -210,6 +212,8 @@ async function canGoFinal(userId, cid) {
                     rank: {$in: [finalUser * 0.1 + 1, finalUser * 0.1]},
                     cid
                 }).exec()
+                console.log('finalUser * 0.1 + 1, finalUser * 0.1')
+                console.log(finalUser * 0.1 + 1, finalUser * 0.1)
                 for(const finalUserInfo of finalUserInfos) {
                     const msg = {
                         'event': 'finalUser',
@@ -217,7 +221,7 @@ async function canGoFinal(userId, cid) {
                     }
                     //global.ws.send('', JSON.stringify(msg), finalUserInfo.userId)
                     global.redisClientPub.publish('newInfo', JSON.stringify({
-                            roomId: '', msg: msg, uid: finalUserInfo.userId
+                            roomId: '', msg: msg, uid: finalUserInfo.userId, cId: cid
                         }
                     ))
                 }
@@ -233,6 +237,306 @@ async function canGoFinal(userId, cid) {
             break;
     }
 }
+
+async function pushFinalPen(cid) {
+    const https = require('https')
+    const data = JSON.stringify({
+        cid
+    })
+
+    const options = {
+        hostname: 'api.ymfsder.com',
+        port: 443,
+        path: '/api/compete/pushFinalPen',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': data.length
+        }
+    }
+
+    const req = https.request(options, res => {
+        console.log(`状态码: ${res.statusCode}`)
+        res.on('data', d => {
+            process.stdout.write(d)
+        })
+    })
+
+    req.on('error', error => {
+        console.error(error)
+    })
+    req.write(data)
+    req.end()
+}
+
+//推送终极排位赛题目
+// async function pushFinalPen(cid) {
+//     let competeInfo = await Compete.findOne({cId: cid})
+//     const finaUsers = await FinalUser.find({cid})
+//     //生成题目，写入数据库
+//     const finalRounds = competeInfo['finalRounds']
+//     //终极排位赛 第4 5 6轮使用场景题
+//     let params = {}
+//     if(finalRounds === 4 || finalRounds === 5 || finalRounds === 6) {
+//         params.penType = {$in: ['判断', '多选', '单选', '场景题']}
+//         // params.penType = {$in: ['场景题']}
+//     } else {
+//         params.penType = {$in: ['判断', '多选', '单选']}
+//     }
+//     const penInfo = await Pen.aggregate().match(params).sample(1)
+//     const finalPenLog = await FinalPenLogSchema.find({
+//         cid: cid, round: finalRounds
+//     }).sort({penNumber: -1}).limit(1).exec()
+//
+//     let penRoundsNumber = 1
+//     if(finalPenLog[0]) {
+//         penRoundsNumber = finalPenLog[0]['penNumber'] + 1
+//     }
+//     //将新数据写入数据
+//     await FinalPenLogSchema.create({
+//         cid: cid,//竞赛id
+//         round: finalRounds,//轮数
+//         penId: penInfo[0].penId, penInfo: penInfo[0],//题目
+//         penNumber: penRoundsNumber,//第几题
+//         pushTime: dayjs().format('YYYY-MM-DD HH:mm:ss')
+//     })
+//     //更新题目推送时间和倒计时。
+//     let countDown = 30
+//     //根据题目是否有倒计时自动设置
+//     if(penInfo[0]['time'] > 0) {
+//         countDown = penInfo[0]['time']
+//     }
+//     for(const finaUser of finaUsers) {
+//         const canGo = await canGoFinal(finaUser.userId, cid)
+//         if(canGo) {
+//             const msg = {
+//                 'event': 'pushFinalPen', 'message': {
+//                     rounds: finalRounds,
+//                     penRoundsNumber: penRoundsNumber,  // 当前所在题目
+//                     allNum: canGo.allNumber,
+//                     area: canGo.area,
+//                     rank: canGo.rank,
+//                     accuracy: canGo.accuracy === 'NaN%' ? '0%' : canGo.accuracy,
+//                     countDown, //'剩余倒计时'
+//                     'penId': penInfo[0].penId,
+//                     'penType': penInfo[0].penType,
+//                     'stem': penInfo[0].stem,
+//                     'options': penInfo[0].options,
+//                     'src': penInfo[0].src,
+//
+//                 }
+//             }
+//             //global.ws.send('', JSON.stringify(msg), finaUser.userId)
+//             global.redisClientPub.publish('newInfo', JSON.stringify({
+//                 roomId: '', msg: msg, uid: finaUser.userId, cId: cid
+//             }))
+//         }
+//     }
+//     const taskStartTime = dayjs().add(countDown, 'second')
+//     const second = taskStartTime.get('second')
+//     const minute = taskStartTime.get('minute')
+//     const hour = taskStartTime.get('hour')
+//     const date = taskStartTime.get('date')
+//     const month = taskStartTime.get('month')
+//     const schedule = new Schedule({
+//         unit_name: '自动题目切换',
+//         maintain_time: `${second} ${minute} ${hour} ${date} ${month + 1} *`, //2016年的1月1日1点1分30秒触发
+//         last_alarm: '自动题目切换'
+//     }).create(async() => {
+//         //判断终极排位赛人数
+//         const finalUser = competeInfo['finalUser']
+//         let spacingCount = 5
+//         if(finalUser === 60) {
+//             spacingCount = 4
+//         }
+//         switch(competeInfo['finalRounds']) {
+//             case 1:
+//                 const finalPenLog_1 = await FinalPenLogSchema.find({
+//                     cid: cid, round: 1
+//                 }).sort({penNumber: -1}).limit(1).exec()
+//                 if(finalPenLog_1 && finalPenLog_1[0]['penNumber'] >= finalUser * 0.3 + spacingCount) {
+//                     Compete.updateOne({cId: cid}, {finalRounds: 2}).exec().then(async() => {
+//                         await pushFinalPen(cid)
+//                     })
+//                     await pushFinalInfo(1, cid)
+//                 } else {
+//                     await pushFinalPen(cid)
+//                 }
+//                 break;
+//             case 2:
+//                 const finalPenLog_2 = await FinalPenLogSchema.find({
+//                     cid: cid, round: 2
+//                 }).sort({penNumber: -1}).limit(1).exec()
+//                 if(finalPenLog_2 && finalPenLog_2[0]['penNumber'] >= finalUser * 0.2 + spacingCount) {
+//                     Compete.updateOne({cId: cid}, {finalRounds: 3}).exec().then(async() => {
+//                         await pushFinalPen(cid)
+//                     })
+//                     await pushFinalInfo(2, cid)
+//                 } else {
+//                     await pushFinalPen(cid)
+//                 }
+//                 break;
+//             case 3:
+//                 //第3轮 1-15 66-100 参加
+//                 //第2轮 11-35  66-100 参加
+//                 const finalPenLog_3 = await FinalPenLogSchema.find({
+//                     cid: cid, round: 3
+//                 }).sort({penNumber: -1}).limit(1).exec()
+//                 if(finalPenLog_3 && finalPenLog_3[0]['penNumber'] >= finalUser * 0.1 + spacingCount) {
+//                     await pushFinalInfo(3, cid)
+//                     await Compete.updateOne({cId: cid}, {finalRounds: 4}).exec()
+//                     //确定挑战者
+//                     const changeUser = await FinalUser.find({
+//                         cid, rank: {$gt: finalUser * 0.6 + spacingCount}
+//                     }).sort({accuracy_number: -1}).limit(1)
+//                     //查询
+//                     await FinalUser.updateOne({rank: finalUser * 0.6 + spacingCount + 1, cid}, {
+//                         rank: finalUser + 1
+//                     })
+//                     await FinalUser.updateOne({userId: changeUser[0].userId, cid}, {
+//                         isChallenger: true, rank: finalUser * 0.6 + spacingCount + 1
+//                     })
+//                     await pushFinalPen(cid)
+//                 } else {
+//                     await pushFinalPen(cid)
+//                 }
+//                 break;
+//             case 4:
+//                 //第4轮
+//                 const challenger = await FinalUser.findOne({isChallenger: true}).exec()
+//                 const challengerUserId = challenger['userId']
+//                 const challengerRank = challenger['rank']
+//                 if(penInfo.penType === '场景题') {
+//                     // 需要等待两人答题完毕
+//                     const answerLogs = await AnswerLog.findOne({
+//                         penId,
+//                         cid,
+//                         type: `${type}-${competeInfo['finalRounds']}-${penRoundsNumber}`,
+//                         uid: challengerUserId
+//                     })
+//                     // 判断当前用户有没有答题，答题且分数大于0，挑战成功
+//                     if(answerLogs && answerLogs.postAnswer > 0) {
+//                         //挑战成功,
+//                         //判断是不是第一次
+//                         const finalPenLogCount = await FinalPenLogSchema.countDocuments({
+//                             cid: cid, round: 4
+//                         })
+//                         if(finalPenLogCount === 1) {
+//                             //被挑战者
+//                             const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
+//                             await FinalUser.updateOne({userId: challengerUserId, cid}, {
+//                                 rank: finalUser * 0.6,
+//                                 answer_time: challenger.answer_time + answerLogs.useTime,
+//                                 answer_number: challenger.answer_number + 1,
+//                                 accuracy_number: challenger.accuracy_number + (answerLogs.isRight ? 1 : 0),
+//                             })
+//                             // await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: challenger.rank})
+//                         } else {
+//                             const downUserInfo = await FinalUser.findOne({rank: challengerRank - 1, cid})
+//                             await FinalUser.updateOne({userId: challengerUserId, cid}, {
+//                                 rank: challengerRank - 1,
+//                                 answer_time: challenger.answer_time + answerLogs.useTime,
+//                                 answer_number: challenger.answer_number + 1,
+//                                 accuracy_number: challenger.accuracy_number + (answerLogs.isRight ? 1 : 0),
+//                             })
+//                             if(downUserInfo) {
+//                                 await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: challengerRank})
+//                             }
+//
+//                         }
+//                         //判断是不是到第一名
+//                         if(challengerRank === 2) {
+//                             await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+//                         }
+//                         //向下一位发送题目
+//                         await pushFinalPen(cid)
+//                     } else {
+//                         await FinalUser.updateOne({userId: challengerUserId, cid}, {isChallenger: false})
+//                         //更改比赛终极排位赛轮次
+//                         await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+//                         await pushFinalPen(cid)
+//                     }
+//                 } else {
+//                     //取消当前用户挑战这生命
+//                     await FinalUser.updateOne({userId: challengerUserId, cid}, {isChallenger: false})
+//                     //更改比赛终极排位赛轮次
+//                     await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
+//                     await pushFinalPen(cid)
+//
+//                 }
+//                 break;
+//             case 5:
+//                 //第5轮 31 vs 30
+//                 if(penInfo.penType === '场景题') {
+//                     // 需要等待两人答题完毕
+//                     const challenger = await FinalUser.findOne({rank: finalUser * 0.3 + 1}).exec()
+//                     const challengerUserId = challenger['userId']
+//                     const challengerRank = challenger['rank']
+//                     const answerLogs = await AnswerLog.findOne({
+//                         penId,
+//                         cid,
+//                         type: `${type}-${competeInfo['finalRounds']}-${penRoundsNumber}`,
+//                         uid: challengerUserId
+//                     })
+//                     // 判断当前用户有没有答题，答题且分数大于0，挑战成功
+//                     if(answerLogs && answerLogs.postAnswer > 0) {
+//                         //挑战成功
+//                         const downUserInfo = await FinalUser.findOne({rank: challengerRank - 1, cid})
+//                         await FinalUser.updateOne({userId: challengerUserId, cid}, {
+//                             rank: challengerRank - 1,
+//                             answer_time: challenger.answer_time + answerLogs.useTime,
+//                             answer_number: challenger.answer_number + 1,
+//                             accuracy_number: challenger.accuracy_number + (answerLogs.isRight ? 1 : 0),
+//                         })
+//                         if(downUserInfo) {
+//                             await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: challengerRank})
+//                         }
+//                     } else {
+//                         await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
+//                         await pushFinalPen(cid)
+//                     }
+//                 } else {
+//                     await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
+//                     await pushFinalPen(cid)
+//                 }
+//                 break;
+//             case 6:
+//                 if(penInfo.penType === '场景题') {
+//                     const challenger = await FinalUser.findOne({rank: ffinalUser * 0.1 + 1}).exec()
+//                     const challengerUserId = challenger['userId']
+//                     const challengerRank = challenger['rank']
+//                     const answerLogs = await AnswerLog.findOne({
+//                         penId,
+//                         cid,
+//                         type: `${type}-${competeInfo['finalRounds']}-${penRoundsNumber}`,
+//                         uid: challengerUserId
+//                     })
+//                     // 判断当前用户有没有答题，答题且分数大于0，挑战成功
+//                     if(answerLogs && answerLogs.postAnswer > 0) {
+//                         const downUserInfo = await FinalUser.findOne({rank: challengerRank - 1, cid})
+//                         await FinalUser.updateOne({userId: challengerUserId, cid}, {
+//                             rank: challengerRank - 1,
+//                             answer_time: challenger.answer_time + answerLogs.useTime,
+//                             answer_number: challenger.answer_number + 1,
+//                             accuracy_number: challenger.accuracy_number + (answerLogs.isRight ? 1 : 0),
+//                         })
+//                         if(downUserInfo) {
+//                             await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: challengerRank})
+//                         }
+//                     } else {
+//                         await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
+//                         await competitionOver(cid)
+//                     }
+//                 } else {
+//                     await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
+//                     await competitionOver(cid)
+//                 }
+//                 break;
+//         }
+//     })
+//     //向所有用户推送信息
+//     await pushCurrentFinalInfo(cid, finalRounds, penRoundsNumber)
+// }
 
 //推送竞赛信息
 async function pushFinalInfo(round, cid) {
@@ -288,26 +592,25 @@ async function pushFinalInfo(round, cid) {
             }
             //查询两个人信息推送
             finalUserInfos = await FinalUser.find({cid, rank: {$in: [rank_1, rank_2]}}).exec()
-            message = '终极排位赛，第四轮，第' + finalPenLogCount + '场 答题已结束'
+            message = '终极排位赛，第四轮，第 1 场 答题已结束'
             break;
         case 5:
             //第5轮 31 vs 30
             finalUserInfos = await FinalUser.find({cid, rank: {$in: [finalUser * 0.3, finalUser * 0.3 + 1]}}).exec()
-            message = '终极排位赛，第五轮，答题已结束'
+            message = '终极排位赛，第四轮，第 2 场 答题已结束'
             break;
         case 6:
             // finalUserInfos = await FinalUser.find({cid, rank: {$in: [finalUser * 0.1, finalUser * 0.3 + 1]}}).exec()
             // message = '终极排位赛，第六轮，答题已结束'
             // break;
             finalUserInfos = await FinalUser.find({cid}).exec()
-            message = '终极排位赛，比赛已结束'
+            message = '终极排位赛，第四轮，第 3 场 答题已结束'
             break;
         case 7:
             finalUserInfos = await FinalUser.find({cid}).exec()
-            message = '终极排位赛，比赛已结束'
+            message = '比赛结束'
             break;
     }
-
     //更新题目推送时间和倒计时。
     for(const finaUser of finalUserInfos) {
         const msg = {
@@ -316,30 +619,83 @@ async function pushFinalInfo(round, cid) {
         }
         //global.ws.send('', JSON.stringify(msg), finaUser.userId)
         global.redisClientPub.publish('newInfo', JSON.stringify({
-                roomId: '', msg: msg, uid: finaUser.userId
+                roomId: '', msg: msg, uid: finaUser.userId, cId: cid
             }
         ))
     }
 }
 
+async function setUserAction(cid, downUid, upUid) {
+
+    FinalUser.updateMany({cid}, {action: 'none'}).then(async() => {
+        console.log('downUid, upUid')
+        console.log(downUid, upUid)
+        await FinalUser.updateOne({userId: downUid}, {action: 'down'}).exec()
+        await FinalUser.updateOne({userId: upUid}, {action: 'up'}).exec()
+    })
+}
+
+async function competitionOver(cid) {
+    const finalUserInfos = await FinalUser.find({cid}).exec()
+    for(const finaUser of finalUserInfos) {
+        //推送竞赛结束
+        const msg = {
+            'event': 'gameOver', 'message': {
+                rank: finaUser.rank
+            }
+        }
+        global.redisClientPub.publish('newInfo', JSON.stringify({
+            roomId: '', msg: msg, uid: finaUser.userId, cId: cid
+        }))
+    }
+}
+
+//生成题目
+async function assignPen(roomId, cid) {
+    //排除当前已经回答过的题目
+    const matchInfo = await Match.findOne({_id: roomId})
+    const answerLogs = await AnswerLog.find({roomId, cid})
+    let penIds = []
+    for(const answerLog of answerLogs) {
+        const penId = answerLog.penId
+        if(!penIds.includes(penId)) {
+            penIds.push(penId)
+        }
+    }
+    let penInfo
+    let params = {}
+    params.penType = {$in: ['判断', '多选', '单选',]}
+    if(penIds.length > 0) {
+        do {
+            penInfo = await Pen.aggregate().match(params).sample(1)
+        } while(penIds.includes(penInfo[0].penId));
+    } else {
+        penInfo = await Pen.aggregate().match(params).sample(1)
+    }
+    //更新题目推送时间和倒计时。
+    await Match.updateOne({_id: roomId, cid}, {
+        'pushTime': dayjs().format('YYYY-MM-DD HH:mm:ss'),
+        'pushPen': matchInfo['pushPen'].length > 0 ? matchInfo['pushPen'].concat(penInfo[0]) : penInfo[0]
+    })
+}
+
 //推送题目
 async function pushPen(roomId, cid, type = 'end', uid = 'all') {
-    //排除当前已经回答过的题目
-    //如果是end，直接查询题目推动
+
+    //直接读取相应的题目返回
     let matchInfo = await Match.findOne({_id: roomId})
-    let countDown = 25
-    let penInfo
-    //总题目数量
+    const countDown = 25 - (dayjs().unix() - dayjs(matchInfo['pushTime']).unix())
     let allNum = 1
+    //总题目数量
     const competeInfo = await Compete.findOne({cId: cid})
     if(competeInfo['currentType'] === 'must') {
         allNum = 5
     }
-    let penRoundsNumber = matchInfo['currentRound']
+
+    const penRoundsNumber = matchInfo['currentRound']
+    const penInfo = matchInfo['pushPen'][penRoundsNumber - 1]
 
     if(type === 'end') {
-        countDown = countDown - (dayjs().unix() - dayjs(matchInfo['pushTime']).unix())
-        penInfo = matchInfo['pushPen']
         const returnRounds = await RoomLog.countDocuments({uid: uid, cId: cid, type: competeInfo['currentType']})
         const msg = {
             'event': 'pushPen',
@@ -348,46 +704,19 @@ async function pushPen(roomId, cid, type = 'end', uid = 'all') {
                 penRoundsNumber,  // 当前所在题目
                 allNum,
                 countDown, //'剩余倒计时'
-                'penId': penInfo[0].penId,
-                'penType': penInfo[0].penType,
-                'stem': penInfo[0].stem,
-                'options': penInfo[0].options,
-                'src': penInfo[0].src,
-                'author': penInfo[0].author
+                'penId': penInfo.penId,
+                'penType': penInfo.penType,
+                'stem': penInfo.stem,
+                'options': penInfo.options,
+                'src': penInfo.src,
+                'author': penInfo.author
             }
         }
         global.redisClientPub.publish('newInfo', JSON.stringify({
-                roomId: '', msg: msg, uid: uid
+                roomId: '', msg: msg, uid: uid, cId: cid
             }
         ))
-
     } else {
-        //推动新题目
-        const answerLogs = await AnswerLog.find({roomId, cid})
-        let penIds = []
-        for(const answerLog of answerLogs) {
-            const penId = answerLog.penId
-            if(!penIds.includes(penId)) {
-                penIds.push(penId)
-            }
-        }
-
-        let params = {}
-        params.penType = {$in: ['判断', '多选', '单选',]}
-        // params.penType = {$in: ['场景题']}
-        if(penIds.length > 0) {
-            do {
-                penInfo = await Pen.aggregate().match(params).sample(1)
-            } while(penIds.includes(penInfo[0].penId));
-        } else {
-            penInfo = await Pen.aggregate().match(params).sample(1)
-        }
-
-        //更新题目推送时间和倒计时。
-        await Match.updateOne({_id: roomId, cid}, {
-            'pushTime': dayjs().format('YYYY-MM-DD HH:mm:ss'), 'pushPen': penInfo[0]
-        })
-
         //给所有人推送题目，默认
         let $allUsers
         if(competeInfo['currentType'] === 'must') {
@@ -395,7 +724,6 @@ async function pushPen(roomId, cid, type = 'end', uid = 'all') {
         } else {
             $allUsers = await User.find({_id: {$in: [matchInfo.userOneId, matchInfo.userTwoId]}})
         }
-
         for(const userInfo of $allUsers) {
             let returnRounds = await RoomLog.countDocuments({
                 uid: userInfo.userId, cId: cid, type: competeInfo['currentType'], roomId: {$ne: roomId}
@@ -408,22 +736,21 @@ async function pushPen(roomId, cid, type = 'end', uid = 'all') {
                     penRoundsNumber,  // 当前所在题目
                     allNum,
                     countDown, //'剩余倒计时'
-                    'penId': penInfo[0].penId,
-                    'penType': penInfo[0].penType,
-                    'stem': penInfo[0].stem,
-                    'options': penInfo[0].options,
-                    'src': penInfo[0].src,
-                    'author': penInfo[0].author
+                    'penId': penInfo.penId,
+                    'penType': penInfo.penType,
+                    'stem': penInfo.stem,
+                    'options': penInfo.options,
+                    'src': penInfo.src,
+                    'author': penInfo.author
 
                 }
             }
-            // global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
-
             global.redisClientPub.publish('newInfo', JSON.stringify({
-                    roomId: roomId.toString(), msg: msg, uid: userInfo.userId
+                    roomId: roomId.toString(), msg: msg, uid: userInfo.userId, cId: cid
                 }
             ))
         }
+
 
     }
 }
@@ -463,7 +790,7 @@ async function exercise(params) {
     //type: 匹配类型 must  disuse
     let matchInfo = await Match.findOneAndUpdate({$and: [{cid}, {type}, {state: {$in: [1]}}]}, {state: 4})
     //更具房间人数添加人员
-    if(matchInfo){
+    if(matchInfo) {
         const _id = matchInfo._id
         switch(type) {
             case 'must':
@@ -472,17 +799,17 @@ async function exercise(params) {
                     userCount: 4,
                     state: 2
                 })
-               break
+                break
             case 'disuse':
                 await Match.updateOne({_id: _id}, {userTwoId: userId, userCount: 2, state: 2})
-               break
+                break
         }
         const msg = {
             'event': 'matchingSuccess',
             'message': _id
         }
         global.redisClientPub.publish('newInfo', JSON.stringify({
-                roomId: '', msg: msg, uid: userInfo.userId
+                roomId: '', msg: msg, uid: userInfo.userId, cId: cid
             }
         ))
         // return _id
@@ -566,7 +893,7 @@ async function startMatch(params) {
                             userThreeId: MatchUsers[2],
                             userFourId: MatchUsers[3],
                             state: 2,
-                            currentRound: 1,
+                            currentRound: 1
                         })
                     }
 
@@ -580,19 +907,20 @@ async function startMatch(params) {
                             userOneId: MatchUsers[0],
                             userTwoId: MatchUsers[1],
                             state: 2,
-                            currentRound: 1,
+                            currentRound: 1
                         })
                     }
                 }
-
+                await assignPen(res._id, cid)
                 const msg = {
                     'event': 'matchingSuccess',
                     'message': res._id
                 }
+
                 for(const MatchUser of MatchUsers) {
                     const userInfo = await User.findById(MatchUser).exec()
                     global.redisClientPub.publish('newInfo', JSON.stringify({
-                            roomId: '', msg: msg, uid: userInfo.userId
+                            roomId: '', msg: msg, uid: userInfo.userId, cId: cid
                         }
                     ))
                 }
@@ -647,7 +975,7 @@ async function matchUserInfo(roomID) {
     Score.findOne()
     //global.ws.send(roomID.toString(), JSON.stringify(msg))
     global.redisClientPub.publish('newInfo', JSON.stringify({
-            roomId: roomID.toString(), msg: msg, uid: ''
+            roomId: roomID.toString(), msg: msg, uid: '', cId: matchUserInfo.cid
         }
     ))
 }
@@ -708,7 +1036,7 @@ async function answerInfo(roomID, rounds) {
     }
     //global.ws.send(roomID.toString(), JSON.stringify(msg), 'all')
     global.redisClientPub.publish('newInfo', JSON.stringify({
-            roomId: roomID.toString(), msg: msg, uid: 'all'
+            roomId: roomID.toString(), msg: msg, uid: 'all', cId: matchUserInfo.cid
         }
     ))
 
@@ -731,6 +1059,80 @@ async function noteRoomLog(params) {
             uid, roomId, rounds, cId, rightNumber: isRight ? 1 : 0, useTime, type
         })
     }
+}
+
+
+async function userRank(cId, uid) {
+    const competitionInfo = await Compete.findOne({cId: cId}).exec()
+    const currentType = competitionInfo['currentType']
+    let myRank = 0
+    let currentRankInfo = []
+    if(currentType === 'final') {
+        const userInfo = await User.findById(uid).exec()
+        const finalUser = await FinalUser.findOne({cId, userId: userInfo.userId}).exec()
+        if(finalUser) {
+            myRank = finalUser.rank
+            currentRankInfo = finalUser
+        }
+    } else {
+
+
+        let info = await Score.aggregate([
+            {
+                $sort: {
+                    'score': -1,
+                    'answer_time': 1,
+                    'lastUpdateTime': 1
+                }
+            },
+            {
+                $match: {
+                    'competeId': parseInt(cId)
+                }
+            },
+            {
+                "$group": {
+                    "_id": null,
+                    "tableA": {
+                        "$push": "$$ROOT"
+                    }
+                }
+            },
+            {
+                $unwind: {
+                    path: '$tableA',
+                    includeArrayIndex: 'arrayIndex'
+                }
+            },
+            {
+                $project: {
+                    '_id': 0,
+                    'userId': '$tableA.userId',
+                    'score': '$tableA.score',
+                    'competeId': '$tableA.competeId',
+                    'arrayIndex': {
+                        $add: ['$arrayIndex', 1]
+                    }
+                }
+            },
+            {
+                $facet: {
+                    'my': [
+                        {
+                            $match: {
+                                "userId": new mongoose.Types.ObjectId(uid),
+                                'competeId': parseInt(cId)
+                            }
+                        }
+                    ],
+                }
+            }
+        ])
+
+        myRank = info[0]['my'][0] ? info[0]['my'][0]['arrayIndex'] : 0
+        currentRankInfo = info[0]['my'][0] ? info[0]['my'][0] : []
+    }
+    return {myRank, currentRankInfo}
 }
 
 /**
@@ -829,7 +1231,8 @@ async function pushCurrentFinalInfo(cid, rounds, penRoundsNumber) {
         if(rank === finalUser * 0.6) {
             userRounds = userRounds === '' ? '第 4 轮第 1 场' : userRounds + '、第 4 轮-第 1 场'
         }
-        if(rounds > 3 && rank !== rank_1 && rank !== rank_2) {
+        if(rounds > 3 && rank < finalUser * 0.6 + spacingCount + 1) {
+            userRounds = userRounds === '' ? `${finalUser * 0.6 + spacingCount + 1}-${finalUser}名挑战区` : userRounds + `、${finalUser * 0.6 + spacingCount + 1}-${finalUser}名挑战区`
             showMessage = '你的答题已经结束'
         }
 
@@ -848,7 +1251,7 @@ async function pushCurrentFinalInfo(cid, rounds, penRoundsNumber) {
         }
         //global.ws.send('', JSON.stringify(msg), finaUser.userId)
         global.redisClientPub.publish('newInfo', JSON.stringify({
-                roomId: '', msg: msg, uid: finaUser.userId
+                roomId: '', msg: msg, uid: finaUser.userId, cId: cid
             }
         ))
     }
@@ -961,5 +1364,10 @@ module.exports = {
     pushFinalInfo,
     pushCurrentFinalInfo,
     getIPAddress,
-    setRoomUserStatus
+    setRoomUserStatus,
+    pushFinalPen,
+    setUserAction,
+    competitionOver,
+    userRank,
+    assignPen
 }

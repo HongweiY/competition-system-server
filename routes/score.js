@@ -18,7 +18,8 @@ const mongoose = require("mongoose");
 const Match = require("../models/matchSchema");
 const FinalUser = require("../models/finalUserSchema");
 const FinalPenLogSchema = require("../models/finalPenLogSchema");
-
+const Schedule = require("../utils/schedule")
+const {pushFinalPen} = require("../utils/util");
 router.prefix('/score')
 
 //定义系统变量
@@ -89,8 +90,7 @@ router.get('/exportScore', async(ctx) => {
             }).populate('userId', 'username-_id,city,depart,phone').sort({score: -1}).exec()
 
             ctx.body = util.success({
-                list,
-                competitionInfo
+                list, competitionInfo
             })
         } catch(e) {
             ctx.body = util.fail(`查询异常${e.stack}`)
@@ -99,18 +99,10 @@ router.get('/exportScore', async(ctx) => {
         //根据终极排位赛导出前100名
         try {
             const list = await FinalUser.find(params, {
-                    _id: 0,
-                    userId: 0,
-                    img: 0,
-                    cid: 0,
-                    createTime: 0,
-                    __v: 0,
-                    isChallenger: 0
-                }
-            ).sort({rank: 1}).exec()
+                _id: 0, userId: 0, img: 0, cid: 0, createTime: 0, __v: 0, isChallenger: 0
+            }).sort({rank: 1}).exec()
             ctx.body = util.success({
-                list,
-                competitionInfo
+                list, competitionInfo
             })
         } catch(e) {
             ctx.body = util.fail(`查询异常${e.stack}`)
@@ -153,10 +145,7 @@ router.post('/checkAnswer', async(ctx) => {
         answerLog = await AnswerLog.countDocuments({uid, roomId, rounds, type, cid, penId})
     } else {
         answerLog = await AnswerLog.countDocuments({
-            uid: userInfo.userId,
-            cid,
-            penId,
-            type: type + '-' + competeInfo['finalRounds'] + '-' + rounds
+            uid: userInfo.userId, cid, penId, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds
         })
     }
 
@@ -190,7 +179,6 @@ router.post('/checkAnswer', async(ctx) => {
         }
 
     }
-
     if(type === 'must' || type === 'disuse') {
         //记录日志
         await AnswerLog.create({
@@ -200,6 +188,30 @@ router.post('/checkAnswer', async(ctx) => {
         //记录当前房间的答题信息
         await util.noteRoomLog({uid, roomId, rounds, cId: cid, isRight, useTime, type})
         await util.answerInfo(roomId, rounds)
+    }
+
+    if(type === 'disuse') {
+        //记录另一个人信息
+        const disuseMatchInfo = await Match.findById(roomId).exec();
+        const otherUserId = disuseMatchInfo['userOneId'] === userInfo._id ? disuseMatchInfo['userTwoId'] : disuseMatchInfo['userOneId']
+        const otherUserInfo = await User.findById(otherUserId).exec()
+        const returnRounds = await RoomLog.countDocuments({
+            uid: otherUserInfo.userId, cId: cid, type, roomId: {$ne: roomId}
+        })
+        await AnswerLog.create({
+            uid: otherUserInfo.userId, penId, roomId, cid, postAnswer: answer,//标签
+            isRight: 0, useTime, type, rounds: returnRounds
+        })
+        //记录当前房间的答题信息
+        await util.noteRoomLog({
+            uid: otherUserInfo.userId,
+            roomId,
+            rounds: returnRounds,
+            cId: cid,
+            isRight: 0,
+            useTime,
+            type
+        })
     }
     //更新积分
     switch(type) {
@@ -225,14 +237,13 @@ router.post('/checkAnswer', async(ctx) => {
                                 //通知客户端进行下一轮匹配
                                 const msg = {
                                     'event': 'matchMewRoom', 'message': {
-                                        rounds:  Math.random()
+                                        rounds: Math.random()
                                     }
                                 }
                                 //global.ws.send(roomId.toString(), JSON.stringify(msg), roomLog.uid)
                                 global.redisClientPub.publish('newInfo', JSON.stringify({
-                                        roomId:roomId.toString(), msg:msg, uid: roomLog.uid
-                                    }
-                                ))
+                                    roomId: roomId.toString(), msg: msg, uid: roomLog.uid, cId: cid
+                                }))
                             }
                             await util.setRoomUserStatus(roomId)
                             ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
@@ -240,13 +251,17 @@ router.post('/checkAnswer', async(ctx) => {
                         return false
                     }
                 } else {
-                    await util.pushPen(roomId, cid, 'start')
+                    util.assignPen(roomId, cid).then(async() => {
+                        await util.pushPen(roomId, cid, 'start')
+                    })
+
                     ctx.body = util.success({'code': 200, 'msg': '马上加载下一题'})
                 }
             }
             break;
         case 'disuse':
             //计算得分
+            console.log('提交答案验证2')
             const roomLog = await RoomLog.findOne({$and: [{roomId}, {type}, {cid}]}).exec()
             //更改状态
             await noteScore({
@@ -264,9 +279,8 @@ router.post('/checkAnswer', async(ctx) => {
                     }
                     //global.ws.send('', JSON.stringify(msg), userInfo.userId)
                     global.redisClientPub.publish('newInfo', JSON.stringify({
-                            roomId:'', msg:msg, uid: userInfo.userId
-                        }
-                    ))
+                        roomId: '', msg: msg, uid: userInfo.userId, cId: cid
+                    }))
                     ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
 
                 }
@@ -311,6 +325,7 @@ router.post('/checkAnswer', async(ctx) => {
                                 const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank - 1})
                                 await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                await util.setUserAction(cid, downUserInfo.userId, uid)
                             }
                         } else {
                             if(rank !== finalUser * 0.6 + spacingCount) {
@@ -319,6 +334,7 @@ router.post('/checkAnswer', async(ctx) => {
                                 if(upUserInfo) {
                                     await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
                                 }
+                                await util.setUserAction(cid, uid, upUserInfo.userId)
 
                             }
                         }
@@ -346,12 +362,14 @@ router.post('/checkAnswer', async(ctx) => {
                                 if(downUserInfo) {
                                     await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
                                 }
+                                await util.setUserAction(cid, downUserInfo.userId, uid)
                             }
                         } else {
                             if(rank !== finalUser * 0.3 + spacingCount) {
                                 const upUserInfo = await FinalUser.findOne({rank: rank + 1, cid})
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank + 1})
                                 await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
+                                await util.setUserAction(cid, uid, upUserInfo.userId)
                             }
                         }
                         const finalPenLog = await FinalPenLogSchema.find({
@@ -378,12 +396,14 @@ router.post('/checkAnswer', async(ctx) => {
                                 const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank - 1})
                                 await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                await util.setUserAction(cid, downUserInfo.userId, uid)
                             }
                         } else {
                             if(rank !== finalUser * 0.1 + spacingCount) {
                                 const upUserInfo = await FinalUser.findOne({rank: rank + 1, cid})
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank + 1})
                                 await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
+                                await util.setUserAction(cid, uid, upUserInfo.userId)
                             }
                         }
                         const finalPenLog = await FinalPenLogSchema.find({
@@ -392,21 +412,20 @@ router.post('/checkAnswer', async(ctx) => {
 
                         if(finalPenLog && finalPenLog[0]['penNumber'] >= finalUser * 0.1 + spacingCount) {
                             await util.pushFinalInfo(3, cid)
-                            await FinalUser.updateOne({rank: finalUser * 0.6 + spacingCount + 1, cid}, {
-                                rank: finalUser + 1
-                            })
+                            // await FinalUser.updateOne({rank: finalUser * 0.6 + spacingCount + 1, cid}, {
+                            //     rank: finalUser + 1
+                            // })
                             await Compete.updateOne({cId: cid}, {finalRounds: 4}).exec()
                             //确定挑战zhe
                             const changeUser = await FinalUser.find({
-                                cid,
-                                rank: {$gt: finalUser * 0.6 + spacingCount}
+                                cid, rank: {$gt: finalUser * 0.6 + spacingCount}
                             }).sort({accuracy_number: -1}).limit(1)
                             //查询
                             await FinalUser.updateOne({userId: changeUser[0].userId, cid}, {
-                                isChallenger: true,
-                                rank: finalUser * 0.6 + spacingCount + 1
+                                isChallenger: true, rank: finalUser * 0.6 + spacingCount + 1
                             })
                             await pushFinalPen(cid)
+
                         } else {
                             await pushFinalPen(cid)
                         }
@@ -447,19 +466,18 @@ router.post('/checkAnswer', async(ctx) => {
                                     const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
                                     await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
                                     await FinalUser.updateOne({
-                                        userId: challengerUser.userId,
-                                        cid
+                                        userId: challengerUser.userId, cid
                                     }, {rank: finalUser * 0.6})
+                                    await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                 } else {
                                     const downUserInfo = await FinalUser.findOne({rank: challengerUser.rank - 1, cid})
                                     await FinalUser.updateOne({
-                                        userId: downUserInfo.userId,
-                                        cid
+                                        userId: downUserInfo.userId, cid
                                     }, {rank: challengerUser.rank})
                                     await FinalUser.updateOne({
-                                        userId: challengerUser.userId,
-                                        cid
+                                        userId: challengerUser.userId, cid
                                     }, {rank: downUserInfo.rank})
+                                    await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                 }
                                 //向下一位发送题目
                                 //判断是不是到第一名
@@ -476,29 +494,28 @@ router.post('/checkAnswer', async(ctx) => {
                             } else if(challengerScore === otherScore) {//分数相等，判断时间
                                 if(challengerTime < otherTime) {
                                     const finalPenLogCount = await FinalPenLogSchema.countDocuments({
-                                        cid: cid,
-                                        round: 4
+                                        cid: cid, round: 4
                                     })
                                     if(finalPenLogCount === 1) {
                                         const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
                                         await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
                                         await FinalUser.updateOne({
-                                            userId: challengerUser.userId,
-                                            cid
+                                            userId: challengerUser.userId, cid
                                         }, {rank: finalUser * 0.6})
+
+                                        await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                     } else {
                                         const downUserInfo = await FinalUser.findOne({
-                                            rank: challengerUser.rank - 1,
-                                            cid
+                                            rank: challengerUser.rank - 1, cid
                                         })
                                         await FinalUser.updateOne({
-                                            userId: downUserInfo.userId,
-                                            cid
+                                            userId: downUserInfo.userId, cid
                                         }, {rank: challengerUser.rank})
                                         await FinalUser.updateOne({
-                                            userId: challengerUser.userId,
-                                            cid
+                                            userId: challengerUser.userId, cid
                                         }, {rank: downUserInfo.rank})
+
+                                        await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                     }
                                     //向下一位发送题目
                                     //判断是不是到第一名
@@ -554,17 +571,18 @@ router.post('/checkAnswer', async(ctx) => {
                             if(finalPenLogCount <= 1) {
                                 const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
                                 await FinalUser.updateOne({
-                                    userId: downUserInfo.userId,
-                                    cid
+                                    userId: downUserInfo.userId, cid
                                 }, {rank: finalUser * 0.6 + 1})
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: finalUser * 0.6})
+                                await util.setUserAction(cid, 0, uid)
                             } else {
                                 const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
                                 await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
                                 await FinalUser.updateOne({
-                                    userId: challengerUser.userId,
-                                    cid
+                                    userId: challengerUser.userId, cid
                                 }, {rank: downUserInfo.rank})
+
+                                await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                             }
                             //向下一位发送题目
                             //判断是不是到第一名
@@ -621,10 +639,10 @@ router.post('/checkAnswer', async(ctx) => {
                                 //挑战成功
                                 const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.3, cid})
                                 await FinalUser.updateOne({
-                                    userId: downUserInfo.userId,
-                                    cid
+                                    userId: downUserInfo.userId, cid
                                 }, {rank: finalUser * 0.3 + 1})
                                 await FinalUser.updateOne({userId: challengerUser.userId, cid}, {rank: finalUser * 0.3})
+                                await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                 if(challengerUser.userId === uid) {
                                     ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
                                 } else {
@@ -634,13 +652,12 @@ router.post('/checkAnswer', async(ctx) => {
                                 if(challengerTime < otherTime) {
                                     const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.3, cid})
                                     await FinalUser.updateOne({
-                                        userId: downUserInfo.userId,
-                                        cid
+                                        userId: downUserInfo.userId, cid
                                     }, {rank: finalUser * 0.3 + 1})
                                     await FinalUser.updateOne({
-                                        userId: challengerUser.userId,
-                                        cid
+                                        userId: challengerUser.userId, cid
                                     }, {rank: finalUser * 0.3})
+                                    await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                     if(challengerUser.userId === uid) {
                                         ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
                                     } else {
@@ -665,9 +682,11 @@ router.post('/checkAnswer', async(ctx) => {
                     } else {
                         const challengerUser = await FinalUser.findOne({rank: finalUser * 0.3 + 1, cid})
                         if(isRight && rank === finalUser * 0.3 + 1) {
+                            // 31 胜利
                             const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.3, cid})
                             await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: finalUser * 0.3 + 1})
                             await FinalUser.updateOne({userId: uid, cid}, {rank: rank})
+                            await util.setUserAction(cid, downUserInfo.userId, uid)
                             if(challengerUser.userId === uid) {
                                 ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
                             } else {
@@ -688,7 +707,6 @@ router.post('/checkAnswer', async(ctx) => {
                     }
                     return false
                 case 6:
-
                     if(penInfo.penType === '场景题') {
                         // 需要等待两人答题完毕
                         const challengerUser = await FinalUser.findOne({rank: finalUser * 0.1 + 1, cid})
@@ -715,26 +733,28 @@ router.post('/checkAnswer', async(ctx) => {
                                 //挑战成功
                                 const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.1, cid})
                                 await FinalUser.updateOne({
-                                    userId: downUserInfo.userId,
-                                    cid
+                                    userId: downUserInfo.userId, cid
                                 }, {rank: finalUser * 0.1 + 1})
                                 await FinalUser.updateOne({userId: challengerUser.userId, cid}, {rank: finalUser * 0.1})
+
+                                await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
+
                                 if(challengerUser.userId === uid) {
                                     ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
                                 } else {
                                     ctx.body = util.success({code: 200, msg: "很遗憾，守位失败"}, '守位失败')
                                 }
+
                             } else if(challengerScore === otherScore) {//分数相等，判断时间
                                 if(challengerTime < otherTime) {
                                     const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.1, cid})
                                     await FinalUser.updateOne({
-                                        userId: downUserInfo.userId,
-                                        cid
+                                        userId: downUserInfo.userId, cid
                                     }, {rank: finalUser * 0.1 + 1})
                                     await FinalUser.updateOne({
-                                        userId: challengerUser.userId,
-                                        cid
+                                        userId: challengerUser.userId, cid
                                     }, {rank: finalUser * 0.1})
+                                    await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                     if(challengerUser.userId === uid) {
                                         ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
                                     } else {
@@ -758,6 +778,7 @@ router.post('/checkAnswer', async(ctx) => {
                             await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
                             await pushFinalPen(cid)
                             await util.pushFinalInfo(6, cid)
+                            await util.competitionOver(cid)
                             return false
                         } else {
                             ctx.body = util.success({code: 200, msg: "回答完成，等待另一个选手回答"}, '回答完成')
@@ -769,6 +790,8 @@ router.post('/checkAnswer', async(ctx) => {
                             const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.1, cid})
                             await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: finalUser * 0.1 + 1})
                             await FinalUser.updateOne({userId: uid, cid}, {rank: rank})
+
+                            await util.setUserAction(cid, downUserInfo.userId, uid)
                             if(challengerUser.userId === uid) {
                                 ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
                             } else {
@@ -782,9 +805,10 @@ router.post('/checkAnswer', async(ctx) => {
                                 ctx.body = util.success({code: 200, msg: "恭喜，守位成功"}, '守位成功')
                             }
                         }
-                        await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
+                        await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
                         await pushFinalPen(cid)
                         await util.pushFinalInfo(6, cid)
+                        await util.competitionOver(cid)
                     }
                     return false
             }
@@ -803,59 +827,58 @@ router.post('/checkAnswer', async(ctx) => {
  */
 router.post('/timeOutAnswer', async(ctx) => {
     const {cid, roomId, type, useTime, rounds, penId} = ctx.request.body
+    if(type === 'final') {
+        ctx.body = util.success({'code': 200, 'msg': ''})
+        return
+    }
     const {authorization} = ctx.request.headers
     const {userInfo} = jwt.decode(authorization.split(' ')[1])
     const uid = userInfo.userId
     //查询当前比赛状态
     let competeInfo = await Compete.findOne({cId: cid}).exec()
+
     if(!competeInfo) {
-        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常1'})
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
         return false
     }
     if(dayjs(competeInfo.endTime).isBefore(dayjs())) {
-        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常2'})
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
         return false
     }
     if(dayjs(competeInfo.startTime).isAfter(dayjs())) {
-        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常3'})
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
         return false
     }
     //判断当前竞赛模式是否正确
     if(type !== competeInfo.currentType) {
-        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常4'})
+        ctx.body = util.success({'code': 500, 'msg': '竞赛信息异常'})
         return false
     }
     //记录当前房间的答题信息
-    if(type !== 'final') {
-        if(!roomId){
-            return false
-        }
-        const MatchInfo = await Match.findOne({_id: roomId, state: 2}).exec()
-        await util.noteRoomLog({uid, roomId, rounds, cId: cid, isRight: false, useTime, type})
-        if(!MatchInfo) {
-            //通知客户端进行下一轮匹配
-            const msg = {
-                'event': 'matchMewRoom', 'message': {
-                    rounds: Math.random()
-                }
-            }
-            //global.ws.send(roomId.toString(), JSON.stringify(msg), uid)
-            global.redisClientPub.publish('newInfo', JSON.stringify({
-                    roomId:roomId.toString(), msg:msg, uid: uid
-                }
-            ))
-            ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
 
-            return false;
-        }
-        await util.setRoomUserStatus(roomId)
-
+    if(!roomId) {
+        return false
     }
-    const penInfo = await Pen.findOne({penId})
+    const MatchInfo = await Match.findOne({_id: roomId, state: 2}).exec()
+    await util.noteRoomLog({uid, roomId, rounds, cId: cid, isRight: false, useTime, type})
+    if(!MatchInfo) {
+        //通知客户端进行下一轮匹配
+        const msg = {
+            'event': 'matchMewRoom', 'message': {
+                rounds: Math.random()
+            }
+        }
+        //global.ws.send(roomId.toString(), JSON.stringify(msg), uid)
+        global.redisClientPub.publish('newInfo', JSON.stringify({
+            roomId: roomId.toString(), msg: msg, uid: uid, cId: cid
+        }))
+        await util.setRoomUserStatus(roomId)
+        ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
+        return false;
+    }
     switch(type) {
         case 'must':
             //必答赛是不是最后一题
-            const MatchInfo = await Match.findOne({_id: roomId, state: 2}).exec()
             await Match.updateOne({_id: roomId}, {currentRound: rounds + 1}).exec()
             if(rounds >= 5) {
                 //计算得分，
@@ -879,17 +902,16 @@ router.post('/timeOutAnswer', async(ctx) => {
                         }
                         //global.ws.send(roomId.toString(), JSON.stringify(msg), roomLog.uid)
                         global.redisClientPub.publish('newInfo', JSON.stringify({
-                                roomId:roomId.toString(), msg:msg, uid: roomLog.uid
-                            }
-                        ))
+                            roomId: roomId.toString(), msg: msg, uid: roomLog.uid, cId: cid
+                        }))
                     }
                     await util.setRoomUserStatus(roomId)
-
-
                     ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
                 })
             } else {
-                await util.pushPen(roomId, cid, 'start')
+                util.assignPen(roomId, cid).then(async() => {
+                    await util.pushPen(roomId, cid, 'start')
+                })
                 ctx.body = util.success({'code': 200, 'msg': '马上加载下一题'})
                 return false
             }
@@ -907,195 +929,12 @@ router.post('/timeOutAnswer', async(ctx) => {
                     }
                     //global.ws.send(roomId.toString(), JSON.stringify(msg), userInfo.userId)
                     global.redisClientPub.publish('newInfo', JSON.stringify({
-                            roomId:roomId.toString(), msg:msg, uid:  userInfo.userId
-                        }
-                    ))
+                        roomId: roomId.toString(), msg: msg, uid: userInfo.userId, cId: cid
+                    }))
                     ctx.body = util.success({'code': 200, 'msg': '本轮答题已结束，自动匹配下一轮'})
                 }
                 await util.setRoomUserStatus(roomId)
             })
-            break;
-        case 'final':
-            //判断终极排位赛人数
-            const finalUser = competeInfo['finalUser']
-            let spacingCount = 5
-            if(finalUser === 60) {
-                spacingCount = 4
-            }
-            const can = await util.canGoFinal(uid, cid)
-            if(can) {
-                const userInfo = await FinalUser.findOne({userId: uid, cid}).exec()
-                const rank = userInfo.rank
-                switch(competeInfo['finalRounds']) {
-                    case 1:
-                        const finalPenLog_1 = await FinalPenLogSchema.find({
-                            cid: cid, round: 1
-                        }).sort({penNumber: -1}).limit(1).exec()
-                        if(finalPenLog_1 && finalPenLog_1[0]['penNumber'] >= finalUser * 0.3 + spacingCount) {
-                            Compete.updateOne({cId: cid}, {finalRounds: 2}).exec().then(async() => {
-                                await pushFinalPen(cid)
-                            })
-                        } else {
-                            await pushFinalPen(cid)
-                        }
-                        break;
-                    case 2:
-                        const finalPenLog_2 = await FinalPenLogSchema.find({
-                            cid: cid, round: 2
-                        }).sort({penNumber: -1}).limit(1).exec()
-                        if(finalPenLog_2 && finalPenLog_2[0]['penNumber'] >= finalUser * 0.2 + spacingCount) {
-                            Compete.updateOne({cId: cid}, {finalRounds: 3}).exec().then(async() => {
-                                await pushFinalPen(cid)
-                            })
-                        } else {
-                            await pushFinalPen(cid)
-                        }
-                        break;
-                    case 3:
-                        //第3轮 1-15 66-100 参加
-                        //第2轮 11-35  66-100 参加
-                        const finalPenLog_3 = await FinalPenLogSchema.find({
-                            cid: cid, round: 3
-                        }).sort({penNumber: -1}).limit(1).exec()
-                        if(finalPenLog_3 && finalPenLog_3[0]['penNumber'] >= finalUser * 0.1 + spacingCount) {
-                            await util.pushFinalInfo(3, cid)
-                            await Compete.updateOne({cId: cid}, {finalRounds: 4}).exec()
-                            //确定挑战zhe
-                            const changeUser = await FinalUser.find({
-                                cid,
-                                rank: {$gt: finalUser * 0.6 + spacingCount}
-                            }).sort({accuracy_number: -1}).limit(1)
-                            //查询
-                            await FinalUser.updateOne({rank: finalUser * 0.6 + spacingCount + 1, cid}, {
-                                rank: finalUser + 1
-                            })
-                            await FinalUser.updateOne({userId: changeUser[0].userId, cid}, {
-                                isChallenger: true,
-                                rank: finalUser * 0.6 + spacingCount + 1
-                            })
-                            await pushFinalPen(cid)
-
-                        } else {
-                            await pushFinalPen(cid)
-                        }
-                        break;
-                        break;
-                    case 4:
-                        //第4轮
-                        if(penInfo.penType === '场景题') {
-                            // 需要等待两人答题完毕
-                            const answerLogs = await AnswerLog.findOne({
-                                penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds, uid
-                            })
-                            // 判断当前用户有没有答题，答题且分数大于0，挑战成功
-                            if(answerLogs && answerLogs.postAnswer > 0 && userInfo['isChallenger']) {
-                                //挑战成功,
-                                //判断是不是第一次
-                                const finalPenLogCount = await FinalPenLogSchema.countDocuments({
-                                    cid: cid,
-                                    round: 4
-                                })
-                                if(finalPenLogCount == 1) {
-                                    const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
-
-                                    await FinalUser.updateOne({userId: uid, cid}, {
-                                        rank: finalUser * 0.6,
-                                        answer_time: userInfo.answer_time + useTime,
-                                        answer_number: userInfo.answer_number + 1,
-                                        accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                    })
-                                    await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
-                                } else {
-                                    const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
-
-                                    await FinalUser.updateOne({userId: uid, cid}, {
-                                        rank: rank - 1,
-                                        answer_time: userInfo.answer_time + useTime,
-                                        answer_number: userInfo.answer_number + 1,
-                                        accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                    })
-                                    await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
-                                }
-                                //判断是不是到第一名
-                                if(rank === 2) {
-                                    await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
-                                }
-                                //向下一位发送题目
-                                await pushFinalPen(cid)
-                            } else {
-                                await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
-                                //更改比赛终极排位赛轮次
-                                await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
-                                await pushFinalPen(cid)
-                                break;
-                            }
-                        } else {
-                            //取消当前用户挑战这生命
-                            await FinalUser.updateOne({userId: uid, cid}, {isChallenger: false})
-                            //更改比赛终极排位赛轮次
-                            await Compete.updateOne({cId: cid}, {finalRounds: 5}).exec()
-                            await pushFinalPen(cid)
-                            break;
-                        }
-                    case 5:
-                        //第5轮 31 vs 30
-                        if(penInfo.penType === '场景题') {
-                            // 需要等待两人答题完毕
-                            const answerLogs = await AnswerLog.findOne({
-                                penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds, uid
-                            })
-                            // 判断当前用户有没有答题，答题且分数大于0，挑战成功
-                            if(answerLogs && answerLogs.postAnswer > 0 && rank === finalUser * 0.3 + 1) {
-                                //挑战成功
-                                const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
-                                await FinalUser.updateOne({userId: uid, cid}, {
-                                    rank: rank - 1,
-                                    answer_time: userInfo.answer_time + useTime,
-                                    answer_number: userInfo.answer_number + 1,
-                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                })
-                                await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
-
-                            } else {
-                                await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
-                                await pushFinalPen(cid)
-                            }
-                        } else {
-                            await Compete.updateOne({cId: cid}, {finalRounds: 6}).exec()
-                            await pushFinalPen(cid)
-                        }
-                        break;
-                    case 6:
-                        if(penInfo.penType === '场景题') {
-                            // 需要等待两人答题完毕
-                            const answerLogs = await AnswerLog.findOne({
-                                penId, cid, type: type + '-' + competeInfo['finalRounds'] + '-' + rounds, uid
-                            })
-                            // 判断当前用户有没有答题，答题且分数大于0，挑战成功
-                            if(answerLogs && answerLogs.postAnswer > 0 && rank === finalUser * 0.1 + 1) {
-                                //挑战成功，进入下一轮
-                                const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
-                                await FinalUser.updateOne({userId: uid, cid}, {
-                                    rank: rank - 1,
-                                    answer_time: userInfo.answer_time + useTime,
-                                    answer_number: userInfo.answer_number + 1,
-                                    accuracy_number: userInfo.accuracy_number + (isRight ? 1 : 0),
-                                })
-                                await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
-                            } else {
-                                await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
-                                await pushFinalPen(cid)
-                            }
-                        } else {
-                            await Compete.updateOne({cId: cid}, {finalRounds: 7}).exec()
-                            await pushFinalPen(cid)
-                        }
-                        break;
-                }
-            } else {
-                return false
-            }
-
             break;
     }
     ctx.body = util.success('', '时间推送完成')
@@ -1163,77 +1002,7 @@ async function noteScore(params) {
 
 }
 
-//推送终极排位赛题目
-async function pushFinalPen(cid) {
-    let competeInfo = await Compete.findOne({cId: cid})
-    const finaUsers = await FinalUser.find({cid})
-    //生成题目，写入数据库
-    const finalRounds = competeInfo['finalRounds']
-    //终极排位赛 第4 5 6轮使用场景题
-    let params = {}
-    if(finalRounds === 4 || finalRounds === 5 || finalRounds === 6) {
-        params.penType = {$in: ['判断', '多选', '单选', '场景题']}
 
-        // params.penType = {$in: ['场景题']}
-    } else {
-        params.penType = {$in: ['判断', '多选', '单选']}
-    }
-    const penInfo = await Pen.aggregate().match(params).sample(1)
-    const finalPenLog = await FinalPenLogSchema.find({
-        cid: cid, round: finalRounds
-    }).sort({penNumber: -1}).limit(1).exec()
-
-    let penRoundsNumber = 1
-    if(finalPenLog[0]) {
-        penRoundsNumber = finalPenLog[0]['penNumber'] + 1
-    }
-
-    //将新数据写入数据
-    await FinalPenLogSchema.create({
-        cid: cid,//竞赛id
-        round: finalRounds,//轮数
-        penId: penInfo[0].penId,
-        penInfo: penInfo[0],//题目
-        penNumber: penRoundsNumber,//第几题
-        pushTime: dayjs().format('YYYY-MM-DD HH:mm:ss')
-    })
-    //更新题目推送时间和倒计时。
-    let countDown = 30
-    //根据题目是否有倒计时自动设置
-    if(penInfo[0]['time'] > 0) {
-        countDown = penInfo[0]['time']
-    }
-    for(const finaUser of finaUsers) {
-        const canGo = await util.canGoFinal(finaUser.userId, cid)
-        if(canGo) {
-            const msg = {
-                'event': 'pushFinalPen',
-                'message': {
-                    rounds: finalRounds,
-                    penRoundsNumber: penRoundsNumber,  // 当前所在题目
-                    allNum: canGo.allNumber,
-                    area: canGo.area,
-                    rank: canGo.rank,
-                    accuracy: canGo.accuracy === 'NaN%' ? '100%' : canGo.accuracy,
-                    countDown, //'剩余倒计时'
-                    'penId': penInfo[0].penId,
-                    'penType': penInfo[0].penType,
-                    'stem': penInfo[0].stem,
-                    'options': penInfo[0].options,
-                    'src': penInfo[0].src,
-
-                }
-            }
-            //global.ws.send('', JSON.stringify(msg), finaUser.userId)
-            global.redisClientPub.publish('newInfo', JSON.stringify({
-                    roomId:'', msg:msg, uid:  finaUser.userId
-                }
-            ))
-        }
-    }
-    //向所有用户推送信息
-    await util.pushCurrentFinalInfo(cid, finalRounds, penRoundsNumber)
-}
 
 
 module.exports = router
