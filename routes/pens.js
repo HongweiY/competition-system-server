@@ -37,7 +37,7 @@ router.post('/import', async(ctx) => {
             if(data['试题类型'] === '多选') {
                 const answerArr = data['答案'].toString().split(',')
                 for(const strings of answerArr) {
-                    answer = answer ? answer + ',' + chooseOptions[strings] : chooseOptions[strings]
+                    answer = answer ? answer + ',' + chooseOptions[strings-1] : chooseOptions[strings-1]
                 }
             } else {
                 answer = chooseOptions[data['答案'] - 1]

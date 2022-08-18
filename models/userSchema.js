@@ -11,6 +11,7 @@ const userSchema = new Schema({
     depart: String,
     phone: String,
     img: String,
+    divisionId:Number,
     userPwd:String,
     role: {
         type: Number, default: 1

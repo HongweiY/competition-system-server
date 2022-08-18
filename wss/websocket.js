@@ -303,7 +303,7 @@ class ws {
                     let sort = {
                         rank: 1,
                     }
-                    let list = await FinalUser.find({cId}, {}, {
+                    let list = await FinalUser.find({cid:cId}, {}, {
                         skip: skipIndex, limit: page_size, sort: sort
                     }).populate(['userId']).exec()
                     total = competitionInfo['finalUser']

@@ -271,18 +271,76 @@ router.post('/startFinal', async(ctx) => {
     }
     //判断竞赛是否存在，
     let competeInfo = await Compete.findOne({cId: cid})
-    if(!competeInfo || dayjs(competeInfo.startTime).isAfter(dayjs()) || dayjs(competeInfo.endTime).isBefore(dayjs())) {
+    if(!competeInfo || dayjs(competeInfo.startTime).isAfter(dayjs())) {
         ctx.body = util.fail(`竞赛信息异常`)
         return
     }
-    if(competeInfo.finalRounds === 7) {
-        await util.competitionOver(cid)
-        return
-    }
+
     //判断用户信息
     const userInfo = await FinalUser.findOne({userId: uid, cid}).exec()
+
     if(!userInfo) {
-        ctx.body = util.fail('你不能参加终极排位赛', util.CODE.PARAM_ERROR)
+        let myRank;
+        const user = await User.findOne({userId: uid}).exec()
+        let info = await Score.aggregate([
+            {
+                $sort: {
+                    'score': -1,
+                    'answer_time': 1,
+                    'lastUpdateTime': 1
+                }
+            },
+            {
+                $match: {
+                    'competeId': parseInt(cid)
+                }
+            },
+            {
+                "$group": {
+                    "_id": null,
+                    "tableA": {
+                        "$push": "$$ROOT"
+                    }
+                }
+            },
+            {
+                $unwind: {
+                    path: '$tableA',
+                    includeArrayIndex: 'arrayIndex'
+                }
+            },
+            {
+                $project: {
+                    '_id': 0,
+                    'userId': '$tableA.userId',
+                    'score': '$tableA.score',
+                    'competeId': '$tableA.competeId',
+                    'arrayIndex': {
+                        $add: ['$arrayIndex', 1]
+                    }
+                }
+            },
+            {
+                $facet: {
+                    'my': [
+                        {
+                            $match: {
+                                "userId": new mongoose.Types.ObjectId(user._id),
+                                'competeId': parseInt(cid)
+                            }
+                        }
+                    ],
+                }
+            }
+        ])
+
+        myRank = info[0]['my'][0] ? info[0]['my'][0]['arrayIndex'] : 0
+        ctx.body = util.success({finalRank: myRank})
+        return
+    }
+    if(competeInfo.finalRounds === 7) {
+        const finalUserInfo = await FinalUser.findOne({cid,userId:uid}).exec()
+        ctx.body = util.success({rank:finalUserInfo.rank})
         return
     }
 
@@ -327,12 +385,10 @@ router.post('/startFinal', async(ctx) => {
                 roomId: '', msg: msg, uid: uid,cId: cid
             }
         ))
-
-        ctx.body = util.success('推送题目')
+        ctx.body = util.success()
     } else {
         await util.pushCurrentFinalInfo(cid, competeInfo['finalRounds'], finalPenLog[0]['penNumber'])
-        ctx.body = util.fail(`你不能参加当前轮次比赛`)
-        return
+        ctx.body = util.success({currentRank:userInfo.rank},`你不能参加当前轮次比赛`)
     }
 })
 
@@ -544,60 +600,12 @@ router.get('/test', async(ctx) => {
 router.get('/userRank', async(ctx) => {
 
     const {uid, cid} = ctx.request.query
-    let info = await Score.aggregate([
-        {
-            $sort: {
-                'score': -1,
-                'answer_time': 1,
-                'lastUpdateTime': 1
-            }
-        },
-        {
-            $match: {
-                'competeId': parseInt(cId)
-            }
-        },
-        {
-            "$group": {
-                "_id": null,
-                "tableA": {
-                    "$push": "$$ROOT"
-                }
-            }
-        },
-        {
-            $unwind: {
-                path: '$tableA',
-                includeArrayIndex: 'arrayIndex'
-            }
-        }, {
-            $project: {
-                '_id': 0,
-                'userId': '$tableA.userId',
-                'score': '$tableA.score',
-                'competeId': '$tableA.competeId',
-                'arrayIndex': {
-                    $add: ['$arrayIndex', 1]
-                }
-            }
-        },
-        {
-            $facet: {
-                'my': [
-                    {
-                        $match: {
-                            "userId": new mongoose.Types.ObjectId(uid),
-                            'competeId': parseInt(cid)
-                        }
-                    }
-                ],
-            }
-        }
-    ])
+    const {myRank, currentRankInfo} = await util.userRank(cid, uid)
     ctx.body = util.success({
         "status": 200,
         "msg": "success",
-        myRank: info[0]['my'][0] ? info[0]['my'][0]['arrayIndex'] : 0
+        myRank,
+        currentRankInfo
     })
 })
 

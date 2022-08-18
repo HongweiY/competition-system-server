@@ -17,8 +17,8 @@ const dayjs = require("dayjs");
 const mongoose = require("mongoose");
 const Match = require("../models/matchSchema");
 const FinalUser = require("../models/finalUserSchema");
+const Division = require("../models/divisionSchema");
 const FinalPenLogSchema = require("../models/finalPenLogSchema");
-const Schedule = require("../utils/schedule")
 const {pushFinalPen} = require("../utils/util");
 router.prefix('/score')
 
@@ -35,13 +35,37 @@ const DisuseTime = 20 * 60
 
 //成绩列表
 router.get('/list', async(ctx) => {
-    const {competeId, username} = ctx.request.query
-    const {page, skipIndex} = util.pager(ctx.request.query)
-    const params = {
-        competeId: parseInt(competeId)
-    }
-    if(username) {
-        const users = await User.find({username: {$regex: username, $options: 'i'}})
+        const {competeId, username, depart} = ctx.request.query
+        const {page, skipIndex} = util.pager(ctx.request.query)
+        const params = {
+            competeId: parseInt(competeId)
+        }
+
+        let users
+        if(username) {
+            if(depart) {
+                console.log(111)
+                users = await User.find({
+                    $and: [
+                        {username: {$regex: username, $options: 'i'}},
+                        {depart: {$regex: depart, $options: 'i'}}
+                    ]
+
+
+                })
+            } else {
+
+                users = await User.find({username: {$regex: username, $options: 'i'}})
+            }
+
+
+        } else {
+            if(depart) {
+                users = await User.find(
+                    {depart: {$regex: depart, $options: 'i'}}
+                )
+            }
+        }
         let userIds = []
         if(users) {
             for(const user of users) {
@@ -49,36 +73,48 @@ router.get('/list', async(ctx) => {
             }
 
         }
-        if(userIds) {
-            params.userId = {
-                $in: userIds
-            }
+        // if(userIds) {
+        //     params.userId = {
+        //         $in: userIds
+        //     }
+        // }
+
+        try {
+
+            const list = await Score.find(params, '', {
+                skip: skipIndex, limit: page.pageSize
+            }).populate({path: 'userId'}).sort({score: -1,answer_time:1,lastUpdateTime:1}).exec()
+            const total = await Score.countDocuments(params)
+            ctx.body = util.success({
+                page: {
+                    ...page, total
+                }, list
+            })
+        } catch(e) {
+            ctx.body = util.fail(`查询异常${e.stack}`)
         }
     }
+)
 
+router.get('/divisionList', async(ctx) => {
     try {
-
-        const list = await Score.find(params, '', {
-            skip: skipIndex, limit: page.pageSize
-        }).populate(['userId']).sort({score: -1}).exec()
-        const total = await Score.countDocuments(params)
+        const list = await Division.find({}, {}).sort({id: -1}).exec()
         ctx.body = util.success({
-            page: {
-                ...page, total
-            }, list
+          list
         })
     } catch(e) {
         ctx.body = util.fail(`查询异常${e.stack}`)
     }
 })
 
+
 router.get('/exportScore', async(ctx) => {
-    const {competeId} = ctx.request.query
+    const {competeId, keyword} = ctx.request.query
     if(!competeId) {
         ctx.body = util.fail('请选择需要导出成绩的竞赛')
     }
     const params = {
-        cid: parseInt(competeId)
+        competeId: parseInt(competeId)
     }
     //根据比赛模式导出对应的成绩
     const competitionInfo = await Compete.findOne({cId: competeId})
@@ -87,7 +123,12 @@ router.get('/exportScore', async(ctx) => {
         try {
             const list = await Score.find(params, {_id: 0, competeId: 0, createTime: 0, __v: 0}, {
                 limit: 100
-            }).populate('userId', 'username-_id,city,depart,phone').sort({score: -1}).exec()
+            }).populate('userId', 'username-_id,city,depart,phone', '', {
+                depart: {
+                    $regex: keyword,
+                    $options: 'i'
+                }
+            }).sort({score: -1}).exec()
 
             ctx.body = util.success({
                 list, competitionInfo
@@ -323,9 +364,12 @@ router.post('/checkAnswer', async(ctx) => {
                         if(isRight) {
                             if(rank !== finalUser * 0.3 + 1) {
                                 const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
+                                if(downUserInfo) {
+                                    await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                    await util.setUserAction(cid, downUserInfo.userId, uid)
+                                }
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank - 1})
-                                await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
-                                await util.setUserAction(cid, downUserInfo.userId, uid)
+
                             }
                         } else {
                             if(rank !== finalUser * 0.6 + spacingCount) {
@@ -333,9 +377,8 @@ router.post('/checkAnswer', async(ctx) => {
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank + 1})
                                 if(upUserInfo) {
                                     await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
+                                    await util.setUserAction(cid, uid, upUserInfo.userId)
                                 }
-                                await util.setUserAction(cid, uid, upUserInfo.userId)
-
                             }
                         }
                         const finalPenLog = await FinalPenLogSchema.find({
@@ -361,15 +404,19 @@ router.post('/checkAnswer', async(ctx) => {
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank - 1})
                                 if(downUserInfo) {
                                     await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                    await util.setUserAction(cid, downUserInfo.userId, uid)
                                 }
-                                await util.setUserAction(cid, downUserInfo.userId, uid)
+
                             }
                         } else {
                             if(rank !== finalUser * 0.3 + spacingCount) {
                                 const upUserInfo = await FinalUser.findOne({rank: rank + 1, cid})
+                                if(upUserInfo) {
+                                    await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
+                                    await util.setUserAction(cid, uid, upUserInfo.userId)
+                                }
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank + 1})
-                                await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
-                                await util.setUserAction(cid, uid, upUserInfo.userId)
+
                             }
                         }
                         const finalPenLog = await FinalPenLogSchema.find({
@@ -394,16 +441,22 @@ router.post('/checkAnswer', async(ctx) => {
                         if(isRight) {
                             if(rank !== 1) {
                                 const downUserInfo = await FinalUser.findOne({rank: rank - 1, cid})
+                                if(downUserInfo) {
+                                    await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                    await util.setUserAction(cid, downUserInfo.userId, uid)
+                                }
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank - 1})
-                                await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
-                                await util.setUserAction(cid, downUserInfo.userId, uid)
+
                             }
                         } else {
                             if(rank !== finalUser * 0.1 + spacingCount) {
                                 const upUserInfo = await FinalUser.findOne({rank: rank + 1, cid})
                                 await FinalUser.updateOne({userId: uid, cid}, {rank: rank + 1})
-                                await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
-                                await util.setUserAction(cid, uid, upUserInfo.userId)
+                                if(upUserInfo) {
+                                    await FinalUser.updateOne({userId: upUserInfo.userId, cid}, {rank: rank})
+                                    await util.setUserAction(cid, uid, upUserInfo.userId)
+                                }
+
                             }
                         }
                         const finalPenLog = await FinalPenLogSchema.find({
@@ -461,7 +514,10 @@ router.post('/checkAnswer', async(ctx) => {
                             //挑战成功
                             if(challengerScore > otherScore) {
                                 //判断是不是第一次
-                                const finalPenLogCount = await FinalPenLogSchema.countDocuments({cid: cid, round: 4})
+                                const finalPenLogCount = await FinalPenLogSchema.countDocuments({
+                                    cid: cid,
+                                    round: 4
+                                })
                                 if(finalPenLogCount === 1) {
                                     const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
                                     await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
@@ -470,7 +526,10 @@ router.post('/checkAnswer', async(ctx) => {
                                     }, {rank: finalUser * 0.6})
                                     await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                 } else {
-                                    const downUserInfo = await FinalUser.findOne({rank: challengerUser.rank - 1, cid})
+                                    const downUserInfo = await FinalUser.findOne({
+                                        rank: challengerUser.rank - 1,
+                                        cid
+                                    })
                                     await FinalUser.updateOne({
                                         userId: downUserInfo.userId, cid
                                     }, {rank: challengerUser.rank})
@@ -497,8 +556,14 @@ router.post('/checkAnswer', async(ctx) => {
                                         cid: cid, round: 4
                                     })
                                     if(finalPenLogCount === 1) {
-                                        const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
-                                        await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: rank})
+                                        const downUserInfo = await FinalUser.findOne({
+                                            rank: finalUser * 0.6,
+                                            cid
+                                        })
+                                        await FinalUser.updateOne({
+                                            userId: downUserInfo.userId,
+                                            cid
+                                        }, {rank: rank})
                                         await FinalUser.updateOne({
                                             userId: challengerUser.userId, cid
                                         }, {rank: finalUser * 0.6})
@@ -526,7 +591,10 @@ router.post('/checkAnswer', async(ctx) => {
                                     if(challengerUser.userId === uid) {
                                         ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
                                     } else {
-                                        ctx.body = util.success({code: 200, msg: "很遗憾，对手挑战成功"}, '守位失败')
+                                        ctx.body = util.success({
+                                            code: 200,
+                                            msg: "很遗憾，对手挑战成功"
+                                        }, '守位失败')
                                     }
                                 } else {
                                     //挑战失败
@@ -567,7 +635,10 @@ router.post('/checkAnswer', async(ctx) => {
                         if(isRight && userInfo['isChallenger']) {
                             //挑战成功,
                             //判断是不是第一次
-                            const finalPenLogCount = await FinalPenLogSchema.countDocuments({cid: cid, round: 4})
+                            const finalPenLogCount = await FinalPenLogSchema.countDocuments({
+                                cid: cid,
+                                round: 4
+                            })
                             if(finalPenLogCount <= 1) {
                                 const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.6, cid})
                                 await FinalUser.updateOne({
@@ -641,7 +712,10 @@ router.post('/checkAnswer', async(ctx) => {
                                 await FinalUser.updateOne({
                                     userId: downUserInfo.userId, cid
                                 }, {rank: finalUser * 0.3 + 1})
-                                await FinalUser.updateOne({userId: challengerUser.userId, cid}, {rank: finalUser * 0.3})
+                                await FinalUser.updateOne({
+                                    userId: challengerUser.userId,
+                                    cid
+                                }, {rank: finalUser * 0.3})
                                 await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
                                 if(challengerUser.userId === uid) {
                                     ctx.body = util.success({code: 200, msg: "挑战成功"}, '挑战成功')
@@ -684,7 +758,10 @@ router.post('/checkAnswer', async(ctx) => {
                         if(isRight && rank === finalUser * 0.3 + 1) {
                             // 31 胜利
                             const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.3, cid})
-                            await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: finalUser * 0.3 + 1})
+                            await FinalUser.updateOne({
+                                userId: downUserInfo.userId,
+                                cid
+                            }, {rank: finalUser * 0.3 + 1})
                             await FinalUser.updateOne({userId: uid, cid}, {rank: rank})
                             await util.setUserAction(cid, downUserInfo.userId, uid)
                             if(challengerUser.userId === uid) {
@@ -735,7 +812,10 @@ router.post('/checkAnswer', async(ctx) => {
                                 await FinalUser.updateOne({
                                     userId: downUserInfo.userId, cid
                                 }, {rank: finalUser * 0.1 + 1})
-                                await FinalUser.updateOne({userId: challengerUser.userId, cid}, {rank: finalUser * 0.1})
+                                await FinalUser.updateOne({
+                                    userId: challengerUser.userId,
+                                    cid
+                                }, {rank: finalUser * 0.1})
 
                                 await util.setUserAction(cid, downUserInfo.userId, challengerUser.userId)
 
@@ -788,7 +868,10 @@ router.post('/checkAnswer', async(ctx) => {
                         const challengerUser = await FinalUser.findOne({rank: finalUser * 0.1 + 1, cid})
                         if(isRight && rank === finalUser * 0.1 + 1) {
                             const downUserInfo = await FinalUser.findOne({rank: finalUser * 0.1, cid})
-                            await FinalUser.updateOne({userId: downUserInfo.userId, cid}, {rank: finalUser * 0.1 + 1})
+                            await FinalUser.updateOne({
+                                userId: downUserInfo.userId,
+                                cid
+                            }, {rank: finalUser * 0.1 + 1})
                             await FinalUser.updateOne({userId: uid, cid}, {rank: rank})
 
                             await util.setUserAction(cid, downUserInfo.userId, uid)
@@ -1001,8 +1084,6 @@ async function noteScore(params) {
 
 
 }
-
-
 
 
 module.exports = router

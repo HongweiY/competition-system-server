@@ -41,7 +41,10 @@ async function canGoFinal(userId, cid) {
         return false
     }
     const rank = userInfo['rank']
-    const accuracy = ((userInfo['accuracy_number'] / userInfo['answer_number']) * 100).toFixed(2) + '%'
+    let accuracy = '0%'
+    if(userInfo['answer_number'] != 0) {
+        accuracy = ((userInfo['accuracy_number'] / userInfo['answer_number']) * 100).toFixed(2) + '%'
+    }
     //查询第几轮
     let competeInfo = await Compete.findOne({cId: cid})
     const finalUser = competeInfo['finalUser']
@@ -767,15 +770,15 @@ async function setRoomUserStatus(roomId) {
         await global.redisClient.get(matchUserInfo['userOneId']) === 'leave' ? "" : await global.redisClient.set(matchUserInfo['userOneId'], "ready")
 
     }
-    if(global.redisClient.get(matchUserInfo['userOneId'])) {
+    if(global.redisClient.get(matchUserInfo['userTwoId'])) {
         await global.redisClient.get(matchUserInfo['userTwoId']) === 'leave' ? "" : await global.redisClient.set(matchUserInfo['userTwoId'], "ready")
 
     }
-    if(global.redisClient.get(matchUserInfo['userOneId'])) {
+    if(global.redisClient.get(matchUserInfo['userThreeId'])) {
         await global.redisClient.get(matchUserInfo['userThreeId']) === 'leave' ? "" : await global.redisClient.set(matchUserInfo['userThreeId'], "ready")
 
     }
-    if(global.redisClient.get(matchUserInfo['userOneId'])) {
+    if(global.redisClient.get(matchUserInfo['userFourId'])) {
         await global.redisClient.get(matchUserInfo['userFourId']) === 'leave' ? "" : await global.redisClient.set(matchUserInfo['userFourId'], "ready")
 
     }
@@ -1069,7 +1072,7 @@ async function userRank(cId, uid) {
     let currentRankInfo = []
     if(currentType === 'final') {
         const userInfo = await User.findById(uid).exec()
-        const finalUser = await FinalUser.findOne({cId, userId: userInfo.userId}).exec()
+        const finalUser = await FinalUser.findOne({cid: cId, userId: userInfo.userId}).exec()
         if(finalUser) {
             myRank = finalUser.rank
             currentRankInfo = finalUser

@@ -12,6 +12,9 @@ const competeSchema = new Schema({
     create_username: String,
     startTime: String,
     endTime: String,
+    divisionId: Number,//赛区
+    competeType:String,//竞赛类型
+    subject:String,//竞赛类型
     finalUser:{ //决赛人数
       type:Number,
       default:100

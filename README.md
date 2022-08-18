@@ -15,16 +15,16 @@ http://localhost:8000/#/?type=must&cid=1&token=MZxS93KRUZghlGGs8xy8Ikn2VrGnIswfb
 
 
 // =========
-https://bmj.ymfsder.com/#/competition_h5?cid=216&token=drptwwA3mPv97xDg6bL9+CDZ+OdXqJ6vrmYNRoRKRIGNVDuloFc3IHQ5iiTdqeDw2hu8OnkrVL/Lf7kScIVdduo12GT+M/nwN25MSu8W7ZZf6SE70or05m7beaWSUIVowPwLS0hSqrgc1uoX7psp1d5QSvznsolzwH8b4d9d1ddEdCw4URkLl6s1VpLABmf7
+localhost:8000/#/competition_h5?cid=1000030&token=drptwwA3mPv97xDg6bL9+CDZ+OdXqJ6vrmYNRoRKRIGNVDuloFc3IHQ5iiTdqeDw2hu8OnkrVL/Lf7kScIVdduo12GT+M/nwN25MSu8W7ZZf6SE70or05m7beaWSUIVowPwLS0hSqrgc1uoX7psp1d5QSvznsolzwH8b4d9d1ddEdCw4URkLl6s1VpLABmf7
 // =========
-http://localhost:8000/#/competitio_h5?cid=24&token=wPOLDOvRlvIAk9jlQsprsyYyfIY7ujyOl9Fi5IhWDwXz+SS8OyNu3ScT91UfaXuDwRiCZEV9Hm8tBPkdALrWJ+2eM2W6KXTXxjvLbY9obTkguo16CMFw9fSp3NnlDprpdd+d2zDcICXMuRVcoswQP19n3JS4MciWxAz6wtLG5U36TWR4ssHKVpP+ddp5MTV/
+bmj.ymfsder.com/#/competitio_h5?cid=24&token=wPOLDOvRlvIAk9jlQsprsyYyfIY7ujyOl9Fi5IhWDwXz+SS8OyNu3ScT91UfaXuDwRiCZEV9Hm8tBPkdALrWJ+2eM2W6KXTXxjvLbY9obTkguo16CMFw9fSp3NnlDprpdd+d2zDcICXMuRVcoswQP19n3JS4MciWxAz6wtLG5U36TWR4ssHKVpP+ddp5MTV/
 // =========
-https://competition.ymfsder.com/#/competition_pc?cid=1224&token=ojDpazYjYsideQSM1J0MZdFqS7Bwij3YB/0m5Sz257/P+/7Fs8D1cT811svlZ+tQ01v9q/sbgvGvTb9Ba2VGt+h2wgVy4N+y+1MoMEDC/dGnN3ck3VVXo+PgD3DDMaFemInINER5QqXNIS2BseWU6XKW5Jna+NDC2AB5xAbgIMVqyJLs7tAXR+JPnkixFaLY
+https://bmj.ymfsder.com/#/competition_h5?cid=311&token=ojDpazYjYsideQSM1J0MZdFqS7Bwij3YB/0m5Sz257/P+/7Fs8D1cT811svlZ+tQ01v9q/sbgvGvTb9Ba2VGt+h2wgVy4N+y+1MoMEDC/dGnN3ck3VVXo+PgD3DDMaFemInINER5QqXNIS2BseWU6XKW5Jna+NDC2AB5xAbgIMVqyJLs7tAXR+JPnkixFaLY
 // =========
-https://bmj.ymfsder.com//#/competition_h5?cid=1224&token=drptwwA3mPv97xDg6bL9+CDZ+OdXqJ6vrmYNRoRKRIGNVDuloFc3IHQ5iiTdqeDw2hu8OnkrVL/Lf7kScIVdduo12GT+M/nwN25MSu8W7ZZf6SE70or05m7beaWSUIVowPwLS0hSqrgc1uoX7psp1d5QSvznsolzwH8b4d9d1ddEdCw4URkLl6s1VpLABmf7
+https://bmj.ymfsder.com/#/competition_h5?cid=311&token=drptwwA3mPv97xDg6bL9+CDZ+OdXqJ6vrmYNRoRKRIGNVDuloFc3IHQ5iiTdqeDw2hu8OnkrVL/Lf7kScIVdduo12GT+M/nwN25MSu8W7ZZf6SE70or05m7beaWSUIVowPwLS0hSqrgc1uoX7psp1d5QSvznsolzwH8b4d9d1ddEdCw4URkLl6s1VpLABmf7
 //=====
-https://competition.ymfsder.com/#/competition_pc?cid=1224&token=ax/ht2ECK1za9KkiWx4TRkPNaJC+a8zoNNMC4kSWzt1Zg2bdoC0uM8YofLgaZRSs46cz3Q5NGWdzZV1sFRBC9uP2hf5xFKtVWBwWmmHhbzwtSKZSdYxNmbW5jxagdyoy6kuVA/OuDwyIGmxI3GOI6SIUKl/145uCDes8bL3I+uR+5NcZ7xgii1OxsGTCAByZ
+https://competition.ymfsder.com/#/competition_pc?cid=311&token=ax/ht2ECK1za9KkiWx4TRkPNaJC+a8zoNNMC4kSWzt1Zg2bdoC0uM8YofLgaZRSs46cz3Q5NGWdzZV1sFRBC9uP2hf5xFKtVWBwWmmHhbzwtSKZSdYxNmbW5jxagdyoy6kuVA/OuDwyIGmxI3GOI6SIUKl/145uCDes8bL3I+uR+5NcZ7xgii1OxsGTCAByZ
 // =========
-https://bmj.ymfsder.com//#/competition_h5?cid=1224&token=MZxS93KRUZghlGGs8xy8Ikn2VrGnIswfbj8jxlLi6BNJPIBwdFT71UqBi8gif1fnBpGvEKC4au6Muqd410gErZySJIk0Se/79s73ynoTVcn4UQtUj6TaehhKclaePnW1WlMOQnpnCkLf7HZNHdAo5Av97GASHM0sbq6pug8DwKpsdV+A+dBg7foPOj3ktK+U
+https://competition.ymfsder.com/#/competition_pc?cid=311&token=MZxS93KRUZghlGGs8xy8Ikn2VrGnIswfbj8jxlLi6BNJPIBwdFT71UqBi8gif1fnBpGvEKC4au6Muqd410gErZySJIk0Se/79s73ynoTVcn4UQtUj6TaehhKclaePnW1WlMOQnpnCkLf7HZNHdAo5Av97GASHM0sbq6pug8DwKpsdV+A+dBg7foPOj3ktK+U
 // =========
 

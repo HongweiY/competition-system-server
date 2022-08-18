@@ -8,17 +8,17 @@ const scoreSchema = new Schema({
     scoreId: Number,
     competeId: Number,
     userId: {
-        type:mongoose.Types.ObjectId,
-        ref:'users'
+        type: mongoose.Types.ObjectId,
+        ref: 'users'
     },
-    score:Number,
-    scoreMust:Number,
-    scoreDisuse:Number,
-    scoreFinal:Number,
-    answer_time:Number,
-    answer_number:Number,
-    accuracy_number:Number,
-    accuracy:Number,
+    score: Number,
+    scoreMust: Number,
+    scoreDisuse: Number,
+    scoreFinal: Number,
+    answer_time: Number,
+    answer_number: Number,
+    accuracy_number: Number,
+    accuracy: Number,
     createTime: {
         type: Date, default: Date.now()
     },
