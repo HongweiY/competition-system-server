@@ -4,7 +4,6 @@ const views = require('koa-views')
 const json = require('koa-json')
 const koaBody = require('koa-body')
 const onerror = require('koa-onerror')
-// const bodyparser = require('koa-bodyparser')
 const logger = require('koa-logger')
 const log4js = require('./utils/log4j')
 const router = require('koa-router')()
@@ -18,7 +17,6 @@ const score = require('./routes/score')
 const competes = require('./routes/competes')
 const pens = require('./routes/pens')
 const WebSocketServer = require('./wss/websocket')
-const debug = require('debug')('demo:server');
 const http = require('http');
 
 const port = normalizePort(process.env.PORT || '9000');
@@ -173,8 +171,6 @@ redisClientSub.on("message", function(channel, message) {
     //往对应房间广播消息
     const {roomId, msg, uid, cId} = JSON.parse(message)
     global.ws.send(roomId, JSON.stringify(msg), uid, cId)
-
-
 });
 
 
