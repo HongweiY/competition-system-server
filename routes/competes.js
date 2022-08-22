@@ -52,8 +52,8 @@ router.post('/create', async(ctx) => {
         screenings,
         currentType = 'must',
         finalUser = 100,
-        division = '综合赛区',
-        divisionId = 1,
+        division = '',
+        divisionId = 0,
         competeType = 1,
         subject = '常规赛'
     } = ctx.request.body
@@ -81,7 +81,7 @@ router.post('/create', async(ctx) => {
         ctx.body = util.success({}, '操作成功')
     } else {
         // 添加
-        if(!title || !scores || !create_uid || !create_username || !startTime || !endTime || !divisionId || !competeType) {
+        if(!title || !scores || !create_uid || !create_username || !startTime || !endTime) {
             ctx.body = util.fail('参数异常', util.CODE.PARAM_ERROR)
             return
         }
