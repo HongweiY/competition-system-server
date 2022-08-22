@@ -71,28 +71,36 @@ router.get('/list', async(ctx) => {
             for(const user of users) {
                 userIds.push(user._id)
             }
-
         }
-        // if(userIds) {
-        //     params.userId = {
-        //         $in: userIds
-        //     }
-        // }
-
-        try {
-
-            const list = await Score.find(params, '', {
-                skip: skipIndex, limit: page.pageSize
-            }).populate({path: 'userId'}).sort({score: -1,answer_time:1,lastUpdateTime:1}).exec()
-            const total = await Score.countDocuments(params)
+console.log( )
+        if(userIds.length > 0) {
+            params.userId = {
+                $in: userIds
+            }
+            try {
+                const list = await Score.find(params, '', {
+                    skip: skipIndex, limit: page.pageSize
+                }).populate({path: 'userId'}).sort({score: -1, answer_time: 1, lastUpdateTime: 1}).exec()
+                const total = await Score.countDocuments(params)
+                ctx.body = util.success({
+                    page: {
+                        ...page, total
+                    }, list
+                })
+            } catch(e) {
+                ctx.body = util.fail(`查询异常${e.stack}`)
+            }
+        } else {
             ctx.body = util.success({
                 page: {
-                    ...page, total
-                }, list
+                    ...page,
+                    total:0
+                },
+                list:[]
             })
-        } catch(e) {
-            ctx.body = util.fail(`查询异常${e.stack}`)
+
         }
+
     }
 )
 
@@ -100,7 +108,7 @@ router.get('/divisionList', async(ctx) => {
     try {
         const list = await Division.find({}, {}).sort({id: -1}).exec()
         ctx.body = util.success({
-          list
+            list
         })
     } catch(e) {
         ctx.body = util.fail(`查询异常${e.stack}`)
