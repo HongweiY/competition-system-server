@@ -35,10 +35,36 @@ const DisuseTime = 20 * 60
 
 //成绩列表
 router.get('/list', async(ctx) => {
-        const {competeId, username, depart} = ctx.request.query
+        const {competeId, username, depart, subject, divisionId} = ctx.request.query
         const {page, skipIndex} = util.pager(ctx.request.query)
-        const params = {
-            competeId: parseInt(competeId)
+        const params = {}
+        if(competeId) {
+            params.competeId = parseInt(competeId)
+        } else {
+            //根据赛区和主题查询对应的竞赛
+            const competeParams = {}
+            if(divisionId) {
+                competeParams.divisionId = divisionId
+            }
+            if(subject) {
+                competeParams.subject = {$regex: subject, $options: 'i'}
+            }
+
+            let cIdArr = []
+            const competitionList = await Compete.find(params).exec()
+            if(competitionList.length > 0) {
+                for(const competition of competitionList) {
+                    cIdArr.push(competition.cId)
+                }
+            }
+
+            if(cIdList.length > 0) {
+                for(const item of cIdList) {
+                    cIdArr.push(item.cId)
+                }
+            }
+
+
         }
 
         let users
@@ -54,11 +80,8 @@ router.get('/list', async(ctx) => {
 
                 })
             } else {
-
                 users = await User.find({username: {$regex: username, $options: 'i'}})
             }
-
-
         } else {
             if(depart) {
                 users = await User.find(
@@ -72,33 +95,24 @@ router.get('/list', async(ctx) => {
                 userIds.push(user._id)
             }
         }
-console.log( )
-        if(userIds.length > 0) {
+
+        if(username || depart) {
             params.userId = {
                 $in: userIds
             }
-            try {
-                const list = await Score.find(params, '', {
-                    skip: skipIndex, limit: page.pageSize
-                }).populate({path: 'userId'}).sort({score: -1, answer_time: 1, lastUpdateTime: 1}).exec()
-                const total = await Score.countDocuments(params)
-                ctx.body = util.success({
-                    page: {
-                        ...page, total
-                    }, list
-                })
-            } catch(e) {
-                ctx.body = util.fail(`查询异常${e.stack}`)
-            }
-        } else {
+        }
+        try {
+            const list = await Score.find(params, '', {
+                skip: skipIndex, limit: page.pageSize
+            }).populate({path: 'userId'}).sort({score: -1, answer_time: 1, lastUpdateTime: 1}).exec()
+            const total = await Score.countDocuments(params)
             ctx.body = util.success({
                 page: {
-                    ...page,
-                    total:0
-                },
-                list:[]
+                    ...page, total
+                }, list
             })
-
+        } catch(e) {
+            ctx.body = util.fail(`查询异常${e.stack}`)
         }
 
     }
@@ -115,6 +129,61 @@ router.get('/divisionList', async(ctx) => {
     }
 })
 
+router.get('/subjectList', async(ctx) => {
+    let {divisionId} = ctx.request.query
+    if(!divisionId) {
+        const divisionInfo = await Division.findOne().exec()
+        divisionId = divisionInfo.id
+    }
+    //查询所有竞赛的主题
+    try {
+        const competitionList = await Compete.find({divisionId}, {}).sort({id: -1}).exec()
+        let subjectList = []
+        if(competitionList.length > 0) {
+            for(const competition of competitionList) {
+                if(subjectList.indexOf(competition.subject) === -1) {
+                    subjectList.push(competition.subject)
+                }
+            }
+        }
+
+        ctx.body = util.success({
+            list: subjectList
+        })
+    } catch(e) {
+        ctx.body = util.fail(`查询异常${e.stack}`)
+    }
+})
+
+router.get('/competitionList', async(ctx) => {
+
+    const {keyword, subject, divisionId} = ctx.request.query
+    const params = {
+        state: 1
+    }
+    if(subject) {
+        params.subject = {
+            $regex: subject, $options: 'i'
+        }
+    }
+    if(divisionId) {
+        params.divisionId = divisionId
+    }
+    if(keyword) {
+        params.title = {
+            $regex: keyword, $options: 'i'
+        }
+    }
+    try {
+        const list = await Compete.find(params).sort({cId: -1}).exec()
+        const total = await Compete.countDocuments(params)
+        ctx.body = util.success({
+            list
+        })
+    } catch(e) {
+        ctx.body = util.fail(`查询异常${e.stack}`)
+    }
+})
 
 router.get('/exportScore', async(ctx) => {
     const {competeId, keyword} = ctx.request.query
