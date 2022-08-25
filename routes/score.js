@@ -97,8 +97,6 @@ router.get('/list', async(ctx) => {
                 $in: userIds
             }
         }
-
-        console.log(params)
         try {
             const list = await Score.find(params, '', {
                 skip: skipIndex, limit: page.pageSize
@@ -184,34 +182,65 @@ router.get('/competitionList', async(ctx) => {
 })
 
 router.get('/exportScore', async(ctx) => {
-    const {competeId, keyword} = ctx.request.query
-    if(!competeId) {
-        ctx.body = util.fail('请选择需要导出成绩的竞赛')
-    }
-    const params = {
-        competeId: parseInt(competeId)
-    }
-    //根据比赛模式导出对应的成绩
-    const competitionInfo = await Compete.findOne({cId: competeId})
-    if(competitionInfo.screenings === 2) {
-        //根据分数表导出成绩
-        try {
-            const list = await Score.find(params, {_id: 0, competeId: 0, createTime: 0, __v: 0}, {
-                limit: 100
-            }).populate('userId', 'username-_id,city,depart,phone', '', {
-                depart: {
-                    $regex: keyword,
-                    $options: 'i'
-                }
-            }).sort({score: -1}).exec()
+    const {competeId, username, depart, subject, divisionId} = ctx.request.query
+    const params = {}
+    if(competeId) {
+        params.competeId = parseInt(competeId)
+    } else {
+        //根据赛区和主题查询对应的竞赛
+        const competeParams = {}
+        if(divisionId) {
+            competeParams.divisionId = divisionId
+        }
+        if(subject) {
+            competeParams.subject = {$regex: subject, $options: 'i'}
+        }
 
-            ctx.body = util.success({
-                list, competitionInfo
+        let cIdList = []
+        const competitionList = await Compete.find(competeParams).exec()
+        if(competitionList.length > 0) {
+            for(const competition of competitionList) {
+                cIdList.push(competition.cId)
+            }
+            params.competeId = {$in: cIdList}
+        }
+    }
+    let users
+    if(username) {
+        if(depart) {
+            users = await User.find({
+                $and: [
+                    {username: {$regex: username, $options: 'i'}},
+                    {depart: {$regex: depart, $options: 'i'}}
+                ]
             })
-        } catch(e) {
-            ctx.body = util.fail(`查询异常${e.stack}`)
+        } else {
+            users = await User.find({username: {$regex: username, $options: 'i'}})
         }
     } else {
+        if(depart) {
+            users = await User.find(
+                {depart: {$regex: depart, $options: 'i'}}
+            )
+        }
+    }
+
+    let userIds = []
+
+    if(users) {
+        for(const user of users) {
+            userIds.push(user._id)
+        }
+    }
+
+    if(username || depart) {
+        params.userId = {
+            $in: userIds
+        }
+    }
+    //传入竞赛ID按比赛类型导出成绩，否则导出前两轮成绩
+    const competitionInfo = await Compete.findOne({cId: competeId})
+    if(competeId && competitionInfo && competitionInfo.screenings === 3) {
         //根据终极排位赛导出前100名
         try {
             const list = await FinalUser.find(params, {
@@ -224,6 +253,20 @@ router.get('/exportScore', async(ctx) => {
             ctx.body = util.fail(`查询异常${e.stack}`)
         }
     }
+    //根据分数表导出成绩
+
+    try {
+        const list = await Score.find(params, {_id: 0, competeId: 0, createTime: 0, __v: 0}, {
+            limit: 100
+        }).populate('userId', 'username-_id,city,depart,phone').sort({score: -1}).exec()
+
+        ctx.body = util.success({
+            list, competitionInfo
+        })
+    } catch(e) {
+        ctx.body = util.fail(`查询异常${e.stack}`)
+    }
+
 
 
 })
