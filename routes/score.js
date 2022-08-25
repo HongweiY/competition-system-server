@@ -50,27 +50,21 @@ router.get('/list', async(ctx) => {
                 competeParams.subject = {$regex: subject, $options: 'i'}
             }
 
-            let cIdArr = []
-            const competitionList = await Compete.find(params).exec()
+            let cIdList = []
+            const competitionList = await Compete.find(competeParams).exec()
             if(competitionList.length > 0) {
                 for(const competition of competitionList) {
-                    cIdArr.push(competition.cId)
+                    cIdList.push(competition.cId)
                 }
+                params.competeId = {$in: cIdList}
             }
-
-            if(cIdList.length > 0) {
-                for(const item of cIdList) {
-                    cIdArr.push(item.cId)
-                }
-            }
-
-
         }
 
+
         let users
+
         if(username) {
             if(depart) {
-                console.log(111)
                 users = await User.find({
                     $and: [
                         {username: {$regex: username, $options: 'i'}},
@@ -89,7 +83,9 @@ router.get('/list', async(ctx) => {
                 )
             }
         }
+
         let userIds = []
+
         if(users) {
             for(const user of users) {
                 userIds.push(user._id)
@@ -101,6 +97,8 @@ router.get('/list', async(ctx) => {
                 $in: userIds
             }
         }
+
+        console.log(params)
         try {
             const list = await Score.find(params, '', {
                 skip: skipIndex, limit: page.pageSize
